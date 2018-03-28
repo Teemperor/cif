@@ -108,9 +108,7 @@ class SecureInformationFlow
     SecurityClass SourceClass = getSecurityClass(Source);
     TargetClass.dump();
     SourceClass.dump();
-    std::cerr << "Checking for violation " << std::endl;
     if (!TargetClass.allowsFlowFrom(SourceClass)) {
-      std::cerr << "Found violation" << std::endl;
       Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
                               Target->getSourceRange(),
                               Source->getSourceRange()});
@@ -136,7 +134,6 @@ class SecureInformationFlow
     switch(S->getStmtClass()) {
       case Stmt::StmtClass::DeclRefExprClass: {
         DeclRefExpr *E = dyn_cast<DeclRefExpr>(S);
-        std::cerr << "Found ref" << std::endl;
         return getSecurityClass(E->getFoundDecl());
       }
       default: break;
@@ -149,7 +146,7 @@ class SecureInformationFlow
     return Result;
   }
 
-  void analyzeStmt(Stmt *S) {
+  void analyzeStmt(FunctionDecl &FD, Stmt *S) {
     if (S == nullptr)
       return;
 
@@ -159,13 +156,18 @@ class SecureInformationFlow
         Decl *D = DS->getSingleDecl();
         if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
           assertAccess(VD,  VD->getInit(), S);
-          analyzeStmt(VD->getInit());
+          analyzeStmt(FD, VD->getInit());
         }
+        break;
+      }
+      case Stmt::StmtClass::ReturnStmtClass: {
+        ReturnStmt *RS = dyn_cast<ReturnStmt>(S);
+        assertAccess(&FD, RS->getRetValue(), RS);
         break;
       }
       default:
         for (Stmt *C : S->children()) {
-          analyzeStmt(C);
+          analyzeStmt(FD, C);
         }
         break;
     }
@@ -173,7 +175,7 @@ class SecureInformationFlow
 
 public:
   void analyzeFunction(FunctionDecl &FD) {
-    analyzeStmt(FD.getBody());
+    analyzeStmt(FD, FD.getBody());
   }
 
   void checkEndOfTranslationUnit(const TranslationUnitDecl *TU,
