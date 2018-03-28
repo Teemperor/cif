@@ -402,6 +402,9 @@ let ParentPackage = Security in {
   def FloatLoopCounter : Checker<"FloatLoopCounter">,
     HelpText<"Warn on using a floating point value as a loop counter (CERT: FLP30-C, FLP30-CPP)">,
     DescFile<"CheckSecuritySyntaxOnly.cpp">;
+  def SecureInformationFlow : Checker<"SecureInformationFlow">,
+    HelpText<"Warn on information flow form secure to non-secure data">,
+    DescFile<"SecureInformationFlow.cpp">;
 }
 
 let ParentPackage = SecurityAlpha in {
