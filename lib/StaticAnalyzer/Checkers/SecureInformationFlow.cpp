@@ -117,6 +117,20 @@ class SecureInformationFlow
     return true;
   }
 
+  bool assertAccess(Stmt *Target, Stmt *Source, Stmt *ViolatingStmt) {
+    SecurityClass TargetClass = getSecurityClass(Target);
+    SecurityClass SourceClass = getSecurityClass(Source);
+    TargetClass.dump();
+    SourceClass.dump();
+    if (!TargetClass.allowsFlowFrom(SourceClass)) {
+      Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
+                              Target->getSourceRange(),
+                              Source->getSourceRange()});
+      return false;
+    }
+    return true;
+  }
+
   SecurityClass getSecurityClass(Decl *D) {
     if (D == nullptr)
       return SecurityClass();
@@ -136,6 +150,10 @@ class SecureInformationFlow
         DeclRefExpr *E = dyn_cast<DeclRefExpr>(S);
         return getSecurityClass(E->getFoundDecl());
       }
+      case Stmt::StmtClass::MemberExprClass: {
+        MemberExpr *E = dyn_cast<MemberExpr>(S);
+        return getSecurityClass(E->getFoundDecl().getDecl());
+      }
       default: break;
     }
 
@@ -151,6 +169,17 @@ class SecureInformationFlow
       return;
 
     switch(S->getStmtClass()) {
+      case Stmt::StmtClass::BinaryOperatorClass: {
+        BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
+        if (BO->getOpcode() == BinaryOperatorKind::BO_Assign) {
+          assertAccess(BO->getLHS(), BO->getRHS(), BO);
+        } else {
+          for (Stmt *C : S->children()) {
+            analyzeStmt(FD, C);
+          }
+        }
+        break;
+      }
       case Stmt::StmtClass::DeclStmtClass: {
         DeclStmt *DS = dyn_cast<DeclStmt>(S);
         Decl *D = DS->getSingleDecl();
@@ -163,6 +192,14 @@ class SecureInformationFlow
       case Stmt::StmtClass::ReturnStmtClass: {
         ReturnStmt *RS = dyn_cast<ReturnStmt>(S);
         assertAccess(&FD, RS->getRetValue(), RS);
+        break;
+      }
+      case Stmt::StmtClass::CXXMemberCallExprClass: {
+        CXXMemberCallExpr *Call = dyn_cast<CXXMemberCallExpr>(S);
+        FunctionDecl *TargetFunc = dyn_cast<FunctionDecl>(Call->getCalleeDecl());
+        for (unsigned I = 0; I < TargetFunc->getNumParams(); ++I) {
+          assertAccess(TargetFunc->getParamDecl(I), Call->getArg(I), Call->getArg(I));
+        }
         break;
       }
       default:
@@ -225,13 +262,10 @@ void SecureInformationFlow::reportViolations(
 
   for (Violation V : Violations) {
     std::string Msg = std::string("Information flow violation to label ")
-        + V.TargetClass.getLabel();
+        + V.TargetClass.getLabel() + " from label " + V.SourceClass.getLabel();
     auto R = llvm::make_unique<BugReport>(*BT_Exact, Msg,
                                           makeLocation(V.ViolatingStmt, Mgr));
     R->addRange(V.TargetLoc);
-
-    std::string Note = std::string("from label ") + V.SourceClass.getLabel();
-    R->addNote(Note, makeLocation(V.Source, Mgr), V.SourceLoc);
     BR.emitReport(std::move(R));
   }
 }
