@@ -2,6 +2,13 @@
 
 #define CIFLabel(LBL) __attribute__((annotate("InfoFlow|" LBL)))
 
+class string {
+public:
+  string operator+(const string &Other) {
+    return Other; // dummy method.
+  }
+};
+
 struct OutputStream {
   void append(CIFLabel("Public") const char *C);
 };
@@ -40,3 +47,4 @@ void createUserAccount(CIFLabel("Public") const char *UserName,
   A.UserName = PasswordHash; // expected-warning{{Information flow violation to label Public from label Password}}
   A.PasswordHash = PasswordHash;
 }
+

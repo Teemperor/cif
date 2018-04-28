@@ -39,6 +39,7 @@ public:
     SecurityClass Result;
     auto Parts = S.split('|');
     if (Parts.first == "InfoFlow") {
+      // TODO check that it's only an identifier
       Result.Owner = Parts.second.str();
     } else {
       std::cerr << "Parsing error" << std::endl;
@@ -120,8 +121,6 @@ class SecureInformationFlow
   bool assertAccess(Stmt *Target, Stmt *Source, Stmt *ViolatingStmt) {
     SecurityClass TargetClass = getSecurityClass(Target);
     SecurityClass SourceClass = getSecurityClass(Source);
-    TargetClass.dump();
-    SourceClass.dump();
     if (!TargetClass.allowsFlowFrom(SourceClass)) {
       Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
                               Target->getSourceRange(),
@@ -218,7 +217,6 @@ public:
   void checkEndOfTranslationUnit(const TranslationUnitDecl *TU,
                                  AnalysisManager &Mgr, BugReporter &BR) const;
 
-  /// Reports all clones to the user.
   void reportViolations(BugReporter &BR, AnalysisManager &Mgr) const;
 };
 
