@@ -94,12 +94,13 @@ class SecureInformationFlow
   std::vector<const Decl *> PureDecls;
 
   void markAsPure(const Decl *D) {
-    PureDecls.push_back(D);
+    PureDecls.push_back(D->getCanonicalDecl());
   }
 
   bool isPure(const Decl *D) {
-    auto It = std::lower_bound(PureDecls.begin(), PureDecls.end(), D);
-    return It != PureDecls.end() && *It == D;
+    auto CD = D->getCanonicalDecl();
+    auto It = std::lower_bound(PureDecls.begin(), PureDecls.end(), CD);
+    return It != PureDecls.end() && *It == CD;
   }
 
   bool assertAccess(SecurityClass TargetClass, SourceRange TargetRange,
