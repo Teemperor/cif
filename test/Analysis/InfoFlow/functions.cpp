@@ -4,7 +4,7 @@
 
 int strcmp(const char *username, const char *password);
 
-CIFPureFunctions {
+CIFPure {
   using ::strcmp;
 }
 

@@ -3,7 +3,12 @@
 #include "CIF.h"
 
 class string {
+  string operator+(const string& S);
 };
+
+CIFPure {
+  using ::string;
+}
 
 string createUserAccount(CIFLabel("Public") string UserName,
                        CIFLabel("Password") string PasswordHash) {

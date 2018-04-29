@@ -13,8 +13,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include <iostream>
-
 #include <unordered_map>
 
 #include "ClangSACheckers.h"
@@ -33,7 +31,6 @@ namespace {
 
 class SecurityClass {
   std::set<std::string> Owners;
-  bool Invalid = false;
 public:
   SecurityClass() {
   }
@@ -47,27 +44,15 @@ public:
         Result.Owners.insert(OwnerString.str());
       }
     } else {
-      std::cerr << "Parsing error" << std::endl;
+      llvm::errs() << "Parsing error\n";
+      abort();
     }
     return Result;
   }
 
   void mergeWith(const SecurityClass &Other) {
-    if (Invalid)
-      return;
-    // Invalid propagates
-    if (Other.Invalid) {
-      Invalid = true;
-      Owners.clear();
-      return;
-    }
-
-    if (Owners.empty())
-      Owners = Other.Owners;
-    else if (!Other.Owners.empty()) {
-      Invalid = true;
-      Owners.clear();
-      std::cerr << "non-matching labels" << std::endl;
+    for (auto &O : Other.Owners) {
+      Owners.insert(O);
     }
   }
 
@@ -90,11 +75,7 @@ public:
   }
 
   void dump() {
-    llvm::errs() << "SecurityClass: " << getLabel();
-
-    if (Invalid)
-      llvm::errs() << ", Invalid";
-    llvm::errs() << "\n";
+    llvm::errs() << "SecurityClass: " << getLabel() << "\n";
   }
 };
 
@@ -110,39 +91,36 @@ class SecureInformationFlow
   };
   std::vector<Violation> Violations;
 
-  std::vector<Decl *> PureFunctions;
+  std::vector<const Decl *> PureDecls;
 
-  void markAsPure(Decl *D) {
-    PureFunctions.push_back(D);
+  void markAsPure(const Decl *D) {
+    PureDecls.push_back(D);
   }
 
-  bool isPure(Decl *D) {
-    auto It = std::lower_bound(PureFunctions.begin(), PureFunctions.end(), D);
-    return It != PureFunctions.end() && *It == D;
+  bool isPure(const Decl *D) {
+    auto It = std::lower_bound(PureDecls.begin(), PureDecls.end(), D);
+    return It != PureDecls.end() && *It == D;
+  }
+
+  bool assertAccess(SecurityClass TargetClass, SourceRange TargetRange,
+                    Stmt *Source, Stmt *ViolatingStmt) {
+    SecurityClass SourceClass = getSecurityClass(Source);
+    if (!TargetClass.allowsFlowFrom(SourceClass)) {
+      Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
+                              TargetRange, Source->getSourceRange()});
+      return false;
+    }
+    return true;
   }
 
   bool assertAccess(Decl *Target, Stmt *Source, Stmt *ViolatingStmt) {
-    SecurityClass TargetClass = getSecurityClass(Target);
-    SecurityClass SourceClass = getSecurityClass(Source);
-    if (!TargetClass.allowsFlowFrom(SourceClass)) {
-      Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
-                              Target->getSourceRange(),
-                              Source->getSourceRange()});
-      return false;
-    }
-    return true;
+    return assertAccess(getSecurityClass(Target), Target->getSourceRange(),
+                        Source, ViolatingStmt);
   }
 
   bool assertAccess(Stmt *Target, Stmt *Source, Stmt *ViolatingStmt) {
-    SecurityClass TargetClass = getSecurityClass(Target);
-    SecurityClass SourceClass = getSecurityClass(Source);
-    if (!TargetClass.allowsFlowFrom(SourceClass)) {
-      Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
-                              Target->getSourceRange(),
-                              Source->getSourceRange()});
-      return false;
-    }
-    return true;
+    return assertAccess(getSecurityClass(Target), Target->getSourceRange(),
+                        Source, ViolatingStmt);
   }
 
   SecurityClass getSecurityClass(Decl *D) {
@@ -159,6 +137,8 @@ class SecureInformationFlow
     if (S == nullptr)
       return SecurityClass();
 
+    SecurityClass Result;
+
     switch(S->getStmtClass()) {
       case Stmt::StmtClass::DeclRefExprClass: {
         DeclRefExpr *E = dyn_cast<DeclRefExpr>(S);
@@ -166,7 +146,14 @@ class SecureInformationFlow
       }
       case Stmt::StmtClass::MemberExprClass: {
         MemberExpr *E = dyn_cast<MemberExpr>(S);
-        return getSecurityClass(E->getFoundDecl().getDecl());
+        Result = getSecurityClass(E->getFoundDecl().getDecl());
+        break;
+      }
+      case Stmt::StmtClass::CXXMemberCallExprClass: {
+        CXXMemberCallExpr *E = dyn_cast<CXXMemberCallExpr>(S);
+        auto S = getSecurityClass(E->getCallee());
+        S.mergeWith(getSecurityClass(E->getMethodDecl()));
+        return S;
       }
       case Stmt::StmtClass::CallExprClass: {
         CallExpr *E = dyn_cast<CallExpr>(S);
@@ -177,7 +164,6 @@ class SecureInformationFlow
       default: break;
     }
 
-    SecurityClass Result;
     for (Stmt *C : S->children()) {
       Result.mergeWith(getSecurityClass(C));
     }
@@ -217,8 +203,13 @@ class SecureInformationFlow
       case Stmt::StmtClass::CXXMemberCallExprClass: {
         CXXMemberCallExpr *Call = dyn_cast<CXXMemberCallExpr>(S);
         FunctionDecl *TargetFunc = dyn_cast<FunctionDecl>(Call->getCalleeDecl());
+        const SecurityClass S = getSecurityClass(Call);
         for (unsigned I = 0; I < TargetFunc->getNumParams(); ++I) {
-          assertAccess(TargetFunc->getParamDecl(I), Call->getArg(I), Call->getArg(I));
+          SecurityClass ParamClass = S;
+          auto Param = TargetFunc->getParamDecl(I);
+          ParamClass.mergeWith(getSecurityClass(Param));
+          assertAccess(ParamClass, Param->getSourceRange(),
+                       Call->getArg(I), Call->getArg(I));
         }
         break;
       }
@@ -273,7 +264,7 @@ void SecureInformationFlow::checkEndOfTranslationUnit(const TranslationUnitDecl 
       }
     }
   }
-  std::sort(Self->PureFunctions.begin(), Self->PureFunctions.end());
+  std::sort(Self->PureDecls.begin(), Self->PureDecls.end());
 
   ForwardToFlowChecker A(*Self);
   A.TraverseTranslationUnitDecl(const_cast<TranslationUnitDecl *>(TU));
