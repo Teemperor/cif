@@ -32,7 +32,7 @@ using namespace ento;
 namespace {
 
 class SecurityClass {
-  std::string Owner;
+  std::set<std::string> Owners;
   bool Invalid = false;
 public:
   SecurityClass() {
@@ -41,8 +41,11 @@ public:
     SecurityClass Result;
     auto Parts = S.split('|');
     if (Parts.first == "InfoFlow") {
-      // TODO check that it's only an identifier
-      Result.Owner = Parts.second.str();
+      llvm::SmallVector<StringRef, 4> OwnerStrings;
+      StringRef(Parts.second).split(OwnerStrings, ',');
+      for (StringRef OwnerString : OwnerStrings) {
+        Result.Owners.insert(OwnerString.str());
+      }
     } else {
       std::cerr << "Parsing error" << std::endl;
     }
@@ -55,33 +58,35 @@ public:
     // Invalid propagates
     if (Other.Invalid) {
       Invalid = true;
-      Owner.clear();
+      Owners.clear();
       return;
     }
 
-    if (Owner.empty())
-      Owner = Other.Owner;
-    else if (!Other.Owner.empty()) {
+    if (Owners.empty())
+      Owners = Other.Owners;
+    else if (!Other.Owners.empty()) {
       Invalid = true;
-      Owner.clear();
+      Owners.clear();
       std::cerr << "non-matching labels" << std::endl;
     }
   }
 
   bool allowsFlowFrom(const SecurityClass &Other) {
-    if (Other.Owner.empty())
-      return true;
-    return Owner == Other.Owner;
+    for (auto &O : Other.Owners) {
+      if (Owners.find(O) == Owners.end())
+        return false;
+    }
+    return true;
   }
 
   std::string getLabel() const {
-    if (Owner.empty())
+    if (Owners.empty())
       return "<NO-LABEL>";
-    return Owner;
+    return llvm::join(Owners, ",");
   }
 
   operator bool() const {
-    return !Owner.empty();
+    return !Owners.empty();
   }
 
   void dump() {
