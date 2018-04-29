@@ -218,6 +218,19 @@ class SecureInformationFlow
         }
         break;
       }
+      case Stmt::StmtClass::CallExprClass: {
+        CallExpr *Call = dyn_cast<CallExpr>(S);
+        FunctionDecl *TargetFunc = dyn_cast<FunctionDecl>(Call->getCalleeDecl());
+        const SecurityClass S = getSecurityClass(Call);
+        for (unsigned I = 0; I < TargetFunc->getNumParams(); ++I) {
+          SecurityClass ParamClass = S;
+          auto Param = TargetFunc->getParamDecl(I);
+          ParamClass.mergeWith(getSecurityClass(Param));
+          assertAccess(ParamClass, Param->getSourceRange(),
+                       Call->getArg(I), Call->getArg(I));
+        }
+        break;
+      }
       default: {
         for (Stmt *C : S->children())
           analyzeStmt(FD, C);
