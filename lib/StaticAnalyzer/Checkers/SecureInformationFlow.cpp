@@ -94,6 +94,10 @@ class SecureInformationFlow
   std::vector<const Decl *> PureDecls;
 
   void markAsPure(const Decl *D) {
+    if (const FunctionTemplateDecl *TFD = dyn_cast<const FunctionTemplateDecl>(D)) {
+      for (const auto &Spez : TFD->specializations())
+        markAsPure(Spez);
+    }
     PureDecls.push_back(D->getCanonicalDecl());
   }
 
