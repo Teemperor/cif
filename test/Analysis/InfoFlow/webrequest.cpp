@@ -1,6 +1,6 @@
 // RUN: %clang_analyze_cc1 -std=c++11 -analyzer-checker=security.SecureInformationFlow -verify %s
 
-#define CIFLabel(LBL) __attribute__((annotate("InfoFlow|" LBL)))
+#include "CIF.h"
 
 struct OutputStream {
   void append(CIFLabel("Public") const char *C);

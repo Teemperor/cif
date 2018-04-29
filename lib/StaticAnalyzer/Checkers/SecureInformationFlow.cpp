@@ -15,6 +15,8 @@
 
 #include <iostream>
 
+#include <unordered_map>
+
 #include "ClangSACheckers.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/Diagnostic.h"
@@ -103,12 +105,20 @@ class SecureInformationFlow
   };
   std::vector<Violation> Violations;
 
+  std::vector<Decl *> PureFunctions;
+
+  void markAsPure(Decl *D) {
+    PureFunctions.push_back(D);
+  }
+
+  bool isPure(Decl *D) {
+    auto It = std::lower_bound(PureFunctions.begin(), PureFunctions.end(), D);
+    return It != PureFunctions.end() && *It == D;
+  }
+
   bool assertAccess(Decl *Target, Stmt *Source, Stmt *ViolatingStmt) {
-    Target->dumpColor();
     SecurityClass TargetClass = getSecurityClass(Target);
     SecurityClass SourceClass = getSecurityClass(Source);
-    TargetClass.dump();
-    SourceClass.dump();
     if (!TargetClass.allowsFlowFrom(SourceClass)) {
       Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
                               Target->getSourceRange(),
@@ -152,6 +162,12 @@ class SecureInformationFlow
       case Stmt::StmtClass::MemberExprClass: {
         MemberExpr *E = dyn_cast<MemberExpr>(S);
         return getSecurityClass(E->getFoundDecl().getDecl());
+      }
+      case Stmt::StmtClass::CallExprClass: {
+        CallExpr *E = dyn_cast<CallExpr>(S);
+        if (isPure(E->getCalleeDecl()))
+          break;
+        return getSecurityClass(E->getCalleeDecl());
       }
       default: break;
     }
@@ -201,11 +217,11 @@ class SecureInformationFlow
         }
         break;
       }
-      default:
-        for (Stmt *C : S->children()) {
+      default: {
+        for (Stmt *C : S->children())
           analyzeStmt(FD, C);
-        }
         break;
+      }
     }
   }
 
@@ -239,7 +255,22 @@ void SecureInformationFlow::checkEndOfTranslationUnit(const TranslationUnitDecl 
                                              AnalysisManager &Mgr,
                                              BugReporter &BR) const {
 
-  ForwardToFlowChecker A(*const_cast<SecureInformationFlow *>(this));
+  SecureInformationFlow *Self = const_cast<SecureInformationFlow *>(this);
+
+  for (Decl *D : TU->decls()) {
+    if (NamespaceDecl *ND = dyn_cast<NamespaceDecl>(D)) {
+      if (ND->getName() == "__CIF_Unqiue_Name_Pure") {
+        for (Decl *PureDecl : ND->decls()) {
+          if (UsingShadowDecl *SD = dyn_cast<UsingShadowDecl>(PureDecl)) {
+            Self->markAsPure(SD->getTargetDecl());
+          }
+        }
+      }
+    }
+  }
+  std::sort(Self->PureFunctions.begin(), Self->PureFunctions.end());
+
+  ForwardToFlowChecker A(*Self);
   A.TraverseTranslationUnitDecl(const_cast<TranslationUnitDecl *>(TU));
   reportViolations(BR, Mgr);
 }
