@@ -109,6 +109,8 @@ class SecureInformationFlow
 
   bool assertAccess(SecurityClass TargetClass, SourceRange TargetRange,
                     Stmt *Source, Stmt *ViolatingStmt) {
+    if (ViolatingStmt == nullptr)
+      return true;
     SecurityClass SourceClass = getSecurityClass(Source);
     if (!TargetClass.allowsFlowFrom(SourceClass)) {
       Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
@@ -193,10 +195,11 @@ class SecureInformationFlow
       }
       case Stmt::StmtClass::DeclStmtClass: {
         DeclStmt *DS = dyn_cast<DeclStmt>(S);
-        Decl *D = DS->getSingleDecl();
-        if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
-          assertAccess(VD,  VD->getInit(), S);
-          analyzeStmt(FD, VD->getInit());
+        for (Decl *CD : DS->decls()) {
+          if (VarDecl *VD = dyn_cast<VarDecl>(CD)) {
+            assertAccess(VD,  VD->getInit(), S);
+            analyzeStmt(FD, VD->getInit());
+          }
         }
         break;
       }
@@ -207,27 +210,47 @@ class SecureInformationFlow
       }
       case Stmt::StmtClass::CXXMemberCallExprClass: {
         CXXMemberCallExpr *Call = dyn_cast<CXXMemberCallExpr>(S);
-        FunctionDecl *TargetFunc = dyn_cast<FunctionDecl>(Call->getCalleeDecl());
+        FunctionDecl *TargetFunc = dyn_cast_or_null<FunctionDecl>(Call->getCalleeDecl());
+        if (!TargetFunc)
+          break;
         const SecurityClass S = getSecurityClass(Call);
-        for (unsigned I = 0; I < TargetFunc->getNumParams(); ++I) {
+        unsigned I = 0;
+        for (Expr * E : Call->arguments()) {
+          ParmVarDecl *Param = nullptr;
+          SourceRange ParamRange;
+          if (I < TargetFunc->getNumParams()) {
+            Param = TargetFunc->getParamDecl(I);
+            ParamRange = Param->getSourceRange();
+          } else {
+            ParamRange = TargetFunc->getLocation();
+          }
           SecurityClass ParamClass = S;
-          auto Param = TargetFunc->getParamDecl(I);
           ParamClass.mergeWith(getSecurityClass(Param));
-          assertAccess(ParamClass, Param->getSourceRange(),
-                       Call->getArg(I), Call->getArg(I));
+          assertAccess(ParamClass, ParamRange, E, E);
+          ++I;
         }
         break;
       }
       case Stmt::StmtClass::CallExprClass: {
         CallExpr *Call = dyn_cast<CallExpr>(S);
-        FunctionDecl *TargetFunc = dyn_cast<FunctionDecl>(Call->getCalleeDecl());
-        const SecurityClass S = getSecurityClass(Call);
-        for (unsigned I = 0; I < TargetFunc->getNumParams(); ++I) {
-          SecurityClass ParamClass = S;
-          auto Param = TargetFunc->getParamDecl(I);
-          ParamClass.mergeWith(getSecurityClass(Param));
-          assertAccess(ParamClass, Param->getSourceRange(),
-                       Call->getArg(I), Call->getArg(I));
+        FunctionDecl *TargetFunc = dyn_cast_or_null<FunctionDecl>(Call->getCalleeDecl());
+        if (!TargetFunc)
+          break;
+        if (isPure(TargetFunc))
+          break;
+        unsigned I = 0;
+        for (Expr * E : Call->arguments()) {
+          ParmVarDecl *Param = nullptr;
+          SourceRange ParamRange;
+          if (I < TargetFunc->getNumParams()) {
+            Param = TargetFunc->getParamDecl(I);
+            ParamRange = Param->getSourceRange();
+          } else {
+            ParamRange = TargetFunc->getLocation();
+          }
+          SecurityClass ParamClass = getSecurityClass(Param);
+          assertAccess(ParamClass, ParamRange, E, E);
+          ++I;
         }
         break;
       }
