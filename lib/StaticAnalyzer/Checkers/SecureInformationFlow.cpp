@@ -102,6 +102,8 @@ class SecureInformationFlow
   }
 
   bool isPure(const Decl *D) {
+    if (D == nullptr)
+      return false;
     auto CD = D->getCanonicalDecl();
     auto It = std::lower_bound(PureDecls.begin(), PureDecls.end(), CD);
     return It != PureDecls.end() && *It == CD;
@@ -186,10 +188,6 @@ class SecureInformationFlow
         BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
         if (BO->getOpcode() == BinaryOperatorKind::BO_Assign) {
           assertAccess(BO->getLHS(), BO->getRHS(), BO);
-        } else {
-          for (Stmt *C : S->children()) {
-            analyzeStmt(FD, C);
-          }
         }
         break;
       }
@@ -234,19 +232,21 @@ class SecureInformationFlow
       case Stmt::StmtClass::CallExprClass: {
         CallExpr *Call = dyn_cast<CallExpr>(S);
         FunctionDecl *TargetFunc = dyn_cast_or_null<FunctionDecl>(Call->getCalleeDecl());
-        if (!TargetFunc)
-          break;
         if (isPure(TargetFunc))
           break;
         unsigned I = 0;
         for (Expr * E : Call->arguments()) {
           ParmVarDecl *Param = nullptr;
           SourceRange ParamRange;
-          if (I < TargetFunc->getNumParams()) {
-            Param = TargetFunc->getParamDecl(I);
-            ParamRange = Param->getSourceRange();
+          if (TargetFunc) {
+            if (I < TargetFunc->getNumParams()) {
+              Param = TargetFunc->getParamDecl(I);
+              ParamRange = Param->getSourceRange();
+            } else {
+              ParamRange = TargetFunc->getLocation();
+            }
           } else {
-            ParamRange = TargetFunc->getLocation();
+            ParamRange = E->getSourceRange();
           }
           SecurityClass ParamClass = getSecurityClass(Param);
           assertAccess(ParamClass, ParamRange, E, E);
@@ -254,12 +254,11 @@ class SecureInformationFlow
         }
         break;
       }
-      default: {
-        for (Stmt *C : S->children())
-          analyzeStmt(FD, C);
-        break;
-      }
+      default:
+          break;
     }
+    for (Stmt *C : S->children())
+      analyzeStmt(FD, C);
   }
 
 public:

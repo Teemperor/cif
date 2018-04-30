@@ -30,7 +30,8 @@ int login4(char *username, CIFLabel("Password") char *password) {
 }
 
 int login5(char *username, CIFLabel("Password") char *password) {
-  return login3(password, password); // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}}
+  return login3(password, password); // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}} \
+  // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}}
 }
 
 void login6(char *username, CIFLabel("Password") char *password) {
