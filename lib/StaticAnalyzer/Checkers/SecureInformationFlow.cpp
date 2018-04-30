@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <unordered_map>
+#include <unordered_set>
 
 #include "ClangSACheckers.h"
 #include "clang/AST/RecursiveASTVisitor.h"
@@ -266,14 +267,33 @@ class SecureInformationFlow
     return DeclassifyInfo();
   }
 
+  const std::unordered_set<BinaryOperatorKind> AssignTypes = {
+    BinaryOperatorKind::BO_Assign,
+    BinaryOperatorKind::BO_AddAssign,
+    BinaryOperatorKind::BO_AndAssign,
+    BinaryOperatorKind::BO_DivAssign,
+    BinaryOperatorKind::BO_MulAssign,
+    BinaryOperatorKind::BO_OrAssign,
+    BinaryOperatorKind::BO_RemAssign,
+    BinaryOperatorKind::BO_ShlAssign,
+    BinaryOperatorKind::BO_ShrAssign,
+    BinaryOperatorKind::BO_SubAssign,
+    BinaryOperatorKind::BO_XorAssign,
+  };
+
+  bool isAssignOp(BinaryOperatorKind K) {
+    return AssignTypes.find(K) != AssignTypes.end();
+  }
+
   void analyzeStmt(FunctionDecl &FD, Stmt *S) {
     if (S == nullptr)
       return;
 
     switch(S->getStmtClass()) {
+      case Stmt::StmtClass::CompoundAssignOperatorClass:
       case Stmt::StmtClass::BinaryOperatorClass: {
         BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
-        if (BO->getOpcode() == BinaryOperatorKind::BO_Assign) {
+        if (isAssignOp(BO->getOpcode())) {
           assertAccess(BO->getLHS(), BO->getRHS(), BO);
         }
         DeclassifyInfo D = tryAsDeclassify(BO);
