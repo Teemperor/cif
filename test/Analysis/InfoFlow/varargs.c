@@ -5,5 +5,5 @@
 void print(const char *, ...);
 
 void login(CIFLabel("Password") const char *Passwd) {
-  print("%s", Passwd);  // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}}
+  print("%s", Passwd);  // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}}
 }

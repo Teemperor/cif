@@ -326,8 +326,8 @@ void SecureInformationFlow::reportViolations(
     BT_Exact.reset(new BugType(this, "Information flow violation", "Information Flow"));
 
   for (Violation V : Violations) {
-    std::string Msg = std::string("Information flow violation to label ")
-        + V.TargetClass.getLabel() + " from label " + V.SourceClass.getLabel();
+    std::string Msg = std::string("Information flow violation from label ")
+        + V.SourceClass.getLabel() + " to label " + V.TargetClass.getLabel();
     auto R = llvm::make_unique<BugReport>(*BT_Exact, Msg,
                                           makeLocation(V.ViolatingStmt, Mgr));
     R->addRange(V.TargetLoc);

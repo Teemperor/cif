@@ -22,12 +22,12 @@ void foo1() {
   int V1 = 1;
   CIFLabel("Secret") int V2 = 2;
 
-  int B = equal(V1, V2);// expected-warning{{Information flow violation to label <NO-LABEL> from label Secret}}
+  int B = equal(V1, V2);// expected-warning{{Information flow violation from label Secret to label <NO-LABEL>}}
 }
 
 void foo2() {
   int V1 = 1;
   CIFLabel("Secret") int V2 = 2;
 
-  equalNonPure(V1, V2); // expected-warning{{Information flow violation to label <NO-LABEL> from label Secret}}
+  equalNonPure(V1, V2); // expected-warning{{Information flow violation from label Secret to label <NO-LABEL>}}
 }

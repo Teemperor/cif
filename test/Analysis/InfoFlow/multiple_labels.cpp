@@ -28,12 +28,12 @@ void createPublicInfo(UserAccount &A, SecureOutputStream &S) {
 
 void logInfo1(UserAccount &A, SecureOutputStream &S) {
   CIFLabel("Public,UnusedLabel") const char *D;
-  D = A.getLogData(); // expected-warning{{Information flow violation to label Public,UnusedLabel from label Password,Public}}
-  S.append(D); // expected-warning{{Information flow violation to label Password,Public from label Public,UnusedLabel}}
+  D = A.getLogData(); // expected-warning{{Information flow violation from label Password,Public to label Public,UnusedLabel}}
+  S.append(D); // expected-warning{{Information flow violation from label Public,UnusedLabel to label Password,Public}}
 }
 
 void logInfo2(UserAccount &A, SecureOutputStream &S) {
   CIFLabel("Public") const char *D;
-  D = A.getLogData(); // expected-warning{{Information flow violation to label Public from label Password,Public}}
+  D = A.getLogData(); // expected-warning{{Information flow violation from label Password,Public to label Public}}
   S.append(D);
 }

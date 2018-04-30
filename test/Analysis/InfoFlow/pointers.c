@@ -14,11 +14,11 @@ struct LoginInfo {
 const char * crypt(const char *s);
 
 void login(CIFLabel("Password") struct Str *Passwd) {
-  const char *c = crypt(Passwd->Data);  // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}}
+  const char *c = crypt(Passwd->Data);  // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}}
 }
 
 void login2(struct LoginInfo *L) {
-  const char *c = crypt(L->Passwd->Data);  // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}}
+  const char *c = crypt(L->Passwd->Data);  // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}}
 }
 
 void setLogin(struct LoginInfo *L, CIFLabel("Password") const char* NewPasswd) {

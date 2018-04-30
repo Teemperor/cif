@@ -9,13 +9,13 @@ CIFPure {
 }
 
 int login1(char *username, CIFLabel("Password") char *password) {
-  int correct = strcmp(password, "letmein"); // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}}
+  int correct = strcmp(password, "letmein"); // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}}
   return correct;
 }
 
 int login2(char *username, CIFLabel("Password") char *password) {
   CIFLabel("Password") int correct = strcmp(password, "letmein");
-  return correct; // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}}
+  return correct; // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}}
 }
 
 CIFLabel("Password")
@@ -30,8 +30,8 @@ int login4(char *username, CIFLabel("Password") char *password) {
 }
 
 int login5(char *username, CIFLabel("Password") char *password) {
-  return login3(password, password); // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}} \
-  // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}}
+  return login3(password, password); // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}} \
+  // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}}
 }
 
 void login6(char *username, CIFLabel("Password") char *password) {
@@ -40,6 +40,6 @@ void login6(char *username, CIFLabel("Password") char *password) {
 }
 
 void login7(char *username, CIFLabel("Password") char *password) {
-  login3(password, password); // expected-warning{{Information flow violation to label <NO-LABEL> from label Password}}
+  login3(password, password); // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}}
   return;
 }

@@ -20,7 +20,7 @@ void createPublicInfo(UserAccount &A, OutputStream &S) {
   S.append(")");
 
   // Printing the password to the output stream is not allowed.
-  S.append(A.PasswordHash); // expected-warning{{Information flow violation to label Public from label Password}}
+  S.append(A.PasswordHash); // expected-warning{{Information flow violation from label Password to label Public}}
 }
 
 void createLoginWelcome(UserAccount &A, OutputStream &S) {
@@ -31,12 +31,12 @@ void createLoginWelcome(UserAccount &A, OutputStream &S) {
   S.append(")");
 
   // Printing the password to the output stream is not allowed.
-  S.append(A.PasswordHash); // expected-warning{{Information flow violation to label Public from label Password}}
+  S.append(A.PasswordHash); // expected-warning{{Information flow violation from label Password to label Public}}
 }
 
 void createUserAccount(CIFLabel("Public") const char *UserName,
                        CIFLabel("Password") const char *PasswordHash) {
   UserAccount A;
-  A.UserName = PasswordHash; // expected-warning{{Information flow violation to label Public from label Password}}
+  A.UserName = PasswordHash; // expected-warning{{Information flow violation from label Password to label Public}}
   A.PasswordHash = PasswordHash;
 }
