@@ -1,4 +1,4 @@
-//===--- SecureInformationFlow.cpp - Clone detection checker -------------*- C++ -*-===//
+﻿//===--- SecureInformationFlow.cpp - Clone detection checker -------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -34,20 +34,28 @@ class SecurityClass {
 public:
   SecurityClass() {
   }
+
   static SecurityClass parse(StringRef S) {
     SecurityClass Result;
+    if (S.empty())
+      return Result;
+    llvm::SmallVector<StringRef, 4> OwnerStrings;
+    StringRef(S).split(OwnerStrings, ',');
+    for (StringRef OwnerString : OwnerStrings) {
+      Result.Owners.insert(OwnerString.str());
+    }
+    return Result;
+  }
+
+  static SecurityClass parseLabel(StringRef S) {
     auto Parts = S.split('|');
     if (Parts.first == "InfoFlow") {
-      llvm::SmallVector<StringRef, 4> OwnerStrings;
-      StringRef(Parts.second).split(OwnerStrings, ',');
-      for (StringRef OwnerString : OwnerStrings) {
-        Result.Owners.insert(OwnerString.str());
-      }
+      return parse(Parts.second);
     } else {
       llvm::errs() << "Parsing error\n";
       abort();
     }
-    return Result;
+    return SecurityClass();
   }
 
   void mergeWith(const SecurityClass &Other) {
@@ -137,7 +145,7 @@ class SecureInformationFlow
       return SecurityClass();
     const AnnotateAttr *A = D->getAttr<AnnotateAttr>();
     if (A) {
-      return SecurityClass::parse(A->getAnnotation().str());
+      return SecurityClass::parseLabel(A->getAnnotation().str());
     }
     return SecurityClass();
   }
@@ -149,6 +157,14 @@ class SecureInformationFlow
     SecurityClass Result;
 
     switch(S->getStmtClass()) {
+      case Stmt::StmtClass::BinaryOperatorClass: {
+        BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
+        DeclassifyInfo D = tryAsDeclassify(BO);
+        if (D.valid()) {
+          return D.getToClass();
+        }
+        break;
+      }
       case Stmt::StmtClass::DeclRefExprClass: {
         DeclRefExpr *E = dyn_cast<DeclRefExpr>(S);
         return getSecurityClass(E->getFoundDecl());
@@ -179,6 +195,77 @@ class SecureInformationFlow
     return Result;
   }
 
+  class DeclassifyInfo {
+    SecurityClass From;
+    SecurityClass To;
+    Stmt *S = nullptr;
+    Stmt *Child = nullptr;
+    bool Valid = false;
+    std::string Error;
+  public:
+    DeclassifyInfo() = default;
+    static DeclassifyInfo parse(Stmt *S, Stmt *Child, StringRef Str) {
+      DeclassifyInfo Result;
+      Result.S = S;
+      Result.Child = Child;
+
+      auto Parts = Str.split("->");
+      if (Parts.second.empty() && !Str.endswith("->")) {
+        Result.Error = "Couldn't parse declassify: " + Str.str();
+        abort();
+      } else {
+        Result.From = SecurityClass::parse(Parts.first);
+        Result.To = SecurityClass::parse(Parts.second);
+
+        Result.Valid = true;
+      }
+
+      return Result;
+    }
+
+    bool valid() const {
+      return Valid;
+    }
+
+    bool hasError() const {
+      return !Error.empty();
+    }
+
+    std::string getError() const {
+      return Error;
+    }
+
+    SecurityClass getFromClass() const {
+      return From;
+    }
+    SecurityClass getToClass() const {
+      return To;
+    }
+
+    Stmt *getChild() const {
+      return Child;
+    }
+
+    Stmt *getStmt() const {
+      return S;
+    }
+  };
+
+  DeclassifyInfo tryAsDeclassify(Stmt *S) {
+    if (BinaryOperator *BO = dyn_cast_or_null<BinaryOperator>(S)) {
+      if (BO->getOpcode() != BinaryOperatorKind::BO_Comma)
+        return DeclassifyInfo();
+      Expr *LHS = BO->getLHS();
+      if (CStyleCastExpr *C = dyn_cast<CStyleCastExpr>(LHS)) {
+        Expr *Content = C->getSubExprAsWritten();
+        if (StringLiteral *Str = dyn_cast_or_null<StringLiteral>(Content)) {
+          return DeclassifyInfo::parse(S, BO->getRHS(), Str->getString());
+        }
+      }
+    }
+    return DeclassifyInfo();
+  }
+
   void analyzeStmt(FunctionDecl &FD, Stmt *S) {
     if (S == nullptr)
       return;
@@ -188,6 +275,11 @@ class SecureInformationFlow
         BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
         if (BO->getOpcode() == BinaryOperatorKind::BO_Assign) {
           assertAccess(BO->getLHS(), BO->getRHS(), BO);
+        }
+        DeclassifyInfo D = tryAsDeclassify(BO);
+        if (D.valid()) {
+          assertAccess(D.getFromClass(), D.getStmt()->getSourceRange(),
+                       D.getChild(), D.getStmt());
         }
         break;
       }
