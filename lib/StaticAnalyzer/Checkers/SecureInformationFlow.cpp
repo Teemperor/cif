@@ -158,6 +158,9 @@ class SecureInformationFlow
     if (CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(D)) {
       Result.mergeWith(getSecurityClass(MD->getParent()));
     }
+    if (FieldDecl *FD = dyn_cast<FieldDecl>(D)) {
+      Result.mergeWith(getSecurityClass(FD->getParent()));
+    }
     return Result;
   }
 
@@ -395,6 +398,13 @@ public:
   void analyzeFunction(FunctionDecl &FD) {
     analyzeStmt(FD, FD.getBody());
   }
+  void analyseInitializer(const CXXCtorInitializer &I) {
+    if (I.isAnyMemberInitializer()) {
+      assertAccess(I.getAnyMember(), I.getInit(), I.getInit());
+    } else {
+
+    }
+  }
 
   void checkEndOfTranslationUnit(const TranslationUnitDecl *TU,
                                  AnalysisManager &Mgr, BugReporter &BR) const;
@@ -411,6 +421,12 @@ public:
   }
   bool VisitFunctionDecl(FunctionDecl *D) {
     Checker.analyzeFunction(*D);
+    return true;
+  }
+  bool VisitCXXConstructorDecl(CXXConstructorDecl *D) {
+    for (auto &I : D->inits()) {
+      Checker.analyseInitializer(*I);
+    }
     return true;
   }
 };
