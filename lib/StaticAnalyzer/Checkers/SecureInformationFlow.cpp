@@ -103,8 +103,14 @@ class SecureInformationFlow
   std::vector<const Decl *> PureDecls;
 
   void markAsPure(const Decl *D) {
+    if (!D)
+      return;
     if (const FunctionTemplateDecl *TFD = dyn_cast<const FunctionTemplateDecl>(D)) {
       for (const auto &Spez : TFD->specializations())
+        markAsPure(Spez);
+    }
+    if (const ClassTemplateDecl *TD = dyn_cast<const ClassTemplateDecl>(D)) {
+      for (const auto &Spez : TD->specializations())
         markAsPure(Spez);
     }
     PureDecls.push_back(D->getCanonicalDecl());
@@ -145,10 +151,14 @@ class SecureInformationFlow
     if (D == nullptr)
       return SecurityClass();
     const AnnotateAttr *A = D->getAttr<AnnotateAttr>();
+    SecurityClass Result;
     if (A) {
-      return SecurityClass::parseLabel(A->getAnnotation().str());
+      Result.mergeWith(SecurityClass::parseLabel(A->getAnnotation().str()));
     }
-    return SecurityClass();
+    if (CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(D)) {
+      Result.mergeWith(getSecurityClass(MD->getParent()));
+    }
+    return Result;
   }
 
   SecurityClass getSecurityClass(Stmt *S) {
@@ -177,8 +187,16 @@ class SecureInformationFlow
       }
       case Stmt::StmtClass::CXXMemberCallExprClass: {
         CXXMemberCallExpr *E = dyn_cast<CXXMemberCallExpr>(S);
-        auto S = getSecurityClass(E->getCallee());
-        S.mergeWith(getSecurityClass(E->getMethodDecl()));
+
+        auto S = SecurityClass();
+        auto CalleeClass = getSecurityClass(E->getCallee());
+        auto MethodClass = getSecurityClass(E->getMethodDecl());
+        if (isPure(E->getRecordDecl())) {
+          return CalleeClass;
+        } else {
+          return MethodClass;
+        }
+
         return S;
       }
       case Stmt::StmtClass::CallExprClass: {
