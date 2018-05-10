@@ -408,8 +408,9 @@ public:
   void analyseInitializer(const CXXCtorInitializer &I) {
     if (I.isAnyMemberInitializer()) {
       assertAccess(I.getAnyMember(), I.getInit(), I.getInit());
-    } else {
-
+    } else if (I.isBaseInitializer()) {
+      // TODO: Can't verify this without finding what constructor
+      // was called?
     }
   }
 
