@@ -11,6 +11,10 @@ struct LoginInfo {
   CIFLabel("Password") struct Str *Passwd;
 };
 
+struct CIFLabel("Password") LoginInfoSec {
+  CIFLabel("A") struct Str *Passwd;
+};
+
 const char * crypt(const char *s);
 
 void login(CIFLabel("Password") struct Str *Passwd) {
@@ -19,6 +23,10 @@ void login(CIFLabel("Password") struct Str *Passwd) {
 
 void login2(struct LoginInfo *L) {
   const char *c = crypt(L->Passwd->Data);  // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}}
+}
+
+void login3(struct LoginInfoSec *L) {
+  const char *c = crypt(L->Passwd->Data);  // expected-warning{{Information flow violation from label A,Password to label <NO-LABEL>}}
 }
 
 void setLogin(struct LoginInfo *L, CIFLabel("Password") const char* NewPasswd) {
