@@ -161,6 +161,13 @@ class SecureInformationFlow
     if (FieldDecl *FD = dyn_cast<FieldDecl>(D)) {
       Result.mergeWith(getSecurityClass(FD->getParent()));
     }
+    if (CXXRecordDecl *RD = dyn_cast<CXXRecordDecl>(D)) {
+      for (auto &Base : RD->bases()) {
+        TypeSourceInfo *T = Base.getTypeSourceInfo();
+        CXXRecordDecl *BaseDecl = T->getType().getTypePtrOrNull()->getAsCXXRecordDecl();
+        Result.mergeWith(getSecurityClass(BaseDecl));
+      }
+    }
     return Result;
   }
 
