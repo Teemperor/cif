@@ -14,6 +14,10 @@ public:
   }
 };
 
+CIFPure {
+  using ::vector;
+}
+
 void send(CIFLabel("Secret") int Ciphertext);
 
 void crypt1(CIFLabel("Secret") vector<int> Primes, int Msg) {
