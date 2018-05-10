@@ -142,6 +142,12 @@ class SecureInformationFlow
                         Source, ViolatingStmt);
   }
 
+  bool assertAccess(Decl *Target, Stmt *Source) {
+    return assertAccess(getSecurityClass(Target), Target->getSourceRange(),
+                        Source, Source);
+  }
+
+
   bool assertAccess(Stmt *Target, Stmt *Source, Stmt *ViolatingStmt) {
     return assertAccess(getSecurityClass(Target), Target->getSourceRange(),
                         Source, ViolatingStmt);
@@ -407,11 +413,15 @@ public:
   }
   void analyseInitializer(const CXXCtorInitializer &I) {
     if (I.isAnyMemberInitializer()) {
-      assertAccess(I.getAnyMember(), I.getInit(), I.getInit());
+      assertAccess(I.getAnyMember(), I.getInit());
     } else if (I.isBaseInitializer()) {
       // TODO: Can't verify this without finding what constructor
       // was called?
     }
+  }
+
+  void analyzeFieldDecl(FieldDecl *D) {
+    assertAccess(D, D->getInClassInitializer());
   }
 
   void checkEndOfTranslationUnit(const TranslationUnitDecl *TU,
@@ -429,6 +439,10 @@ public:
   }
   bool VisitFunctionDecl(FunctionDecl *D) {
     Checker.analyzeFunction(*D);
+    return true;
+  }
+  bool VisitFieldDecl(FieldDecl *D) {
+    Checker.analyzeFieldDecl(D);
     return true;
   }
   bool VisitCXXConstructorDecl(CXXConstructorDecl *D) {
