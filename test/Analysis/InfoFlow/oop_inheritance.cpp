@@ -6,6 +6,8 @@ class CIFLabel("Base") Base {
 public:
   CIFLabel("BaseF") int BM;
   Base() = default;
+  Base(CIFLabel("BC") int a) {
+  }
 };
 
 class CIFLabel("A") F : public Base {
@@ -16,5 +18,8 @@ public:
   }
   F(CIFLabel("C") int a) {
       M = a; // expected-warning{{Information flow violation from label C to label A,Base,F}}
+  }
+  // TODO: This shouldn't be allowed.
+  F(CIFLabel("C") int a, unsigned) : Base(a) {
   }
 };
