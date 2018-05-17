@@ -153,7 +153,7 @@ class SecureInformationFlow
                         Source, ViolatingStmt);
   }
 
-  SecurityClass getSecurityClass(const Decl *D) {
+  SecurityClass getSecurityClass(const Decl *D, bool CheckRedecls = true) {
     if (D == nullptr)
       return SecurityClass();
     const AnnotateAttr *A = D->getAttr<AnnotateAttr>();
@@ -177,6 +177,16 @@ class SecureInformationFlow
     if (const VarDecl *VD = dyn_cast<VarDecl>(D)) {
       Result.mergeWith(getSecurityClass(VD->getType()->getAsCXXRecordDecl()));
       Result.mergeWith(getSecurityClass(VD->getType()->getPointeeCXXRecordDecl()));
+    }
+    if (CheckRedecls) {
+      const Decl *Redecl = D->getMostRecentDecl();
+      do {
+        // Don't redecl check the previous decl, otherwise we just keep
+        // keep recursively checking the redecl chain.
+        Result.mergeWith(getSecurityClass(Redecl, /*CheckRedecls*/false));
+        if (Redecl->isFirstDecl())
+          break;
+      } while ((Redecl = Redecl->getPreviousDecl()));
     }
     return Result;
   }
