@@ -22,4 +22,12 @@ public:
   // TODO: This shouldn't be allowed.
   F(CIFLabel("C") int a, unsigned) : Base(a) {
   }
+  F() = default;
 };
+
+
+  void foo() {
+    CIFLabel("B") F f;
+    F otherF = f; // expected-warning{{Information flow violation from label A,B,Base to label A,Base}}
+    Base &base = f; // expected-warning{{Information flow violation from label A,B,Base to label Base}}
+  }

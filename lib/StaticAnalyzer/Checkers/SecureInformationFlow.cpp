@@ -153,7 +153,7 @@ class SecureInformationFlow
                         Source, ViolatingStmt);
   }
 
-  SecurityClass getSecurityClass(Decl *D) {
+  SecurityClass getSecurityClass(const Decl *D) {
     if (D == nullptr)
       return SecurityClass();
     const AnnotateAttr *A = D->getAttr<AnnotateAttr>();
@@ -161,18 +161,22 @@ class SecureInformationFlow
     if (A) {
       Result.mergeWith(SecurityClass::parseLabel(A->getAnnotation().str()));
     }
-    if (CXXMethodDecl *MD = dyn_cast<CXXMethodDecl>(D)) {
+    if (const CXXMethodDecl *MD = dyn_cast<const CXXMethodDecl>(D)) {
       Result.mergeWith(getSecurityClass(MD->getParent()));
     }
-    if (FieldDecl *FD = dyn_cast<FieldDecl>(D)) {
+    if (const FieldDecl *FD = dyn_cast<const FieldDecl>(D)) {
       Result.mergeWith(getSecurityClass(FD->getParent()));
     }
-    if (CXXRecordDecl *RD = dyn_cast<CXXRecordDecl>(D)) {
+    if (const CXXRecordDecl *RD = dyn_cast<const CXXRecordDecl>(D)) {
       for (auto &Base : RD->bases()) {
         TypeSourceInfo *T = Base.getTypeSourceInfo();
-        CXXRecordDecl *BaseDecl = T->getType().getTypePtrOrNull()->getAsCXXRecordDecl();
+        const CXXRecordDecl *BaseDecl = T->getType().getTypePtrOrNull()->getAsCXXRecordDecl();
         Result.mergeWith(getSecurityClass(BaseDecl));
       }
+    }
+    if (const VarDecl *VD = dyn_cast<VarDecl>(D)) {
+      Result.mergeWith(getSecurityClass(VD->getType()->getAsCXXRecordDecl()));
+      Result.mergeWith(getSecurityClass(VD->getType()->getPointeeCXXRecordDecl()));
     }
     return Result;
   }
