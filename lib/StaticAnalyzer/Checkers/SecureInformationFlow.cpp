@@ -161,6 +161,27 @@ class SecureInformationFlow
     if (A) {
       Result.mergeWith(SecurityClass::parseLabel(A->getAnnotation().str()));
     }
+    if (const ParmVarDecl *PD = dyn_cast<const ParmVarDecl>(D)) {
+      auto C = PD->getDeclContext();
+      const FunctionDecl *const FD = dyn_cast_or_null<const FunctionDecl>(C);
+      if (CheckRedecls && FD) {
+        unsigned ParamIndex = 0;
+        bool FoundParam = false;
+        for(; ParamIndex < FD->getNumParams(); ++ParamIndex) {
+          auto TestParam = FD->getParamDecl(ParamIndex);
+          if (TestParam == PD) {
+            FoundParam = true;
+            break;
+          }
+        }
+        if (FoundParam) {
+          for (const FunctionDecl *Redecl : FD->redecls()) {
+            auto RedeclParam = Redecl->getParamDecl(ParamIndex);
+            Result.mergeWith(getSecurityClass(RedeclParam, /*CheckRedecls*/false));
+          }
+        }
+      }
+    }
     if (const CXXMethodDecl *MD = dyn_cast<const CXXMethodDecl>(D)) {
       Result.mergeWith(getSecurityClass(MD->getParent()));
     }
