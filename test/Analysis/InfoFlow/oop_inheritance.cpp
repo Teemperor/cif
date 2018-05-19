@@ -26,8 +26,8 @@ public:
 };
 
 
-  void foo() {
-    CIFLabel("B") F f;
-    F otherF = f; // expected-warning{{Information flow violation from label A,B,Base to label A,Base}}
-    Base &base = f; // expected-warning{{Information flow violation from label A,B,Base to label Base}}
-  }
+void foo() {
+  CIFLabel("B") F f;
+  F otherF = f; // expected-warning{{Information flow violation from label A,B,Base to label A,Base}}
+  Base &base = f; // expected-warning{{Information flow violation from label A,B,Base to label Base}}
+}
