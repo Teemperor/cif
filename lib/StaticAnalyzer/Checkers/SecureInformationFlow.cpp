@@ -52,9 +52,6 @@ public:
     auto Parts = S.split('|');
     if (Parts.first == "InfoFlow") {
       return parse(Parts.second);
-    } else {
-      llvm::errs() << "Parsing error\n";
-      abort();
     }
     return SecurityClass();
   }
@@ -124,6 +121,17 @@ class SecureInformationFlow
     return It != PureDecls.end() && *It == CD;
   }
 
+  bool assertAccess(Stmt *ViolatingStmt,
+                    SecurityClass TargetClass, SourceRange TargetRange,
+                    SecurityClass SourceClass, SourceRange SourceRange) {
+    if (!TargetClass.allowsFlowFrom(SourceClass)) {
+      Violations.push_back({ViolatingStmt, nullptr, TargetClass, SourceClass,
+                              TargetRange, SourceRange});
+      return false;
+    }
+    return true;
+  }
+
   bool assertAccess(SecurityClass TargetClass, SourceRange TargetRange,
                     Stmt *Source, Stmt *ViolatingStmt) {
     if (ViolatingStmt == nullptr)
@@ -153,33 +161,64 @@ class SecureInformationFlow
                         Source, ViolatingStmt);
   }
 
+  void foreachParamRedecl(const ParmVarDecl *D, std::function<void(const ParmVarDecl*)> Func) {
+    auto C = D->getDeclContext();
+    const FunctionDecl *const FD = dyn_cast_or_null<const FunctionDecl>(C);
+    if (FD) {
+      unsigned ParamIndex = 0;
+      bool FoundParam = false;
+      for(; ParamIndex < FD->getNumParams(); ++ParamIndex) {
+        auto TestParam = FD->getParamDecl(ParamIndex);
+        if (TestParam == D) {
+          FoundParam = true;
+          break;
+        }
+      }
+      if (FoundParam) {
+        for (const FunctionDecl *Redecl : FD->redecls()) {
+          auto RedeclParam = Redecl->getParamDecl(ParamIndex);
+          Func(RedeclParam);
+        }
+      }
+    }
+  }
+
+  bool isOutParam(const ParmVarDecl *D) {
+    if (D == nullptr)
+      return false;
+
+    bool Result = false;
+    foreachParamRedecl(D, [&Result](const ParmVarDecl *Other) {
+      auto Attrs = Other->specific_attrs<AnnotateAttr>();
+      for (const auto &A : Attrs) {
+        StringRef AS = A->getAnnotation();
+        Result |= (AS == "InfoFlow-Out");
+      }
+    });
+    return Result;
+  }
+
+  SecurityClass getSecurityClassAttrs(const Decl *D) {
+    SecurityClass Result;
+    auto Attrs = D->specific_attrs<AnnotateAttr>();
+    for (const auto &A : Attrs) {
+      StringRef AS = A->getAnnotation();
+      Result.mergeWith(SecurityClass::parseLabel(A->getAnnotation().str()));
+    }
+    return Result;
+  }
+
   SecurityClass getSecurityClass(const Decl *D, bool CheckRedecls = true) {
     if (D == nullptr)
       return SecurityClass();
-    const AnnotateAttr *A = D->getAttr<AnnotateAttr>();
-    SecurityClass Result;
-    if (A) {
-      Result.mergeWith(SecurityClass::parseLabel(A->getAnnotation().str()));
-    }
+
+    SecurityClass Result = getSecurityClassAttrs(D);
+
     if (const ParmVarDecl *PD = dyn_cast<const ParmVarDecl>(D)) {
-      auto C = PD->getDeclContext();
-      const FunctionDecl *const FD = dyn_cast_or_null<const FunctionDecl>(C);
-      if (CheckRedecls && FD) {
-        unsigned ParamIndex = 0;
-        bool FoundParam = false;
-        for(; ParamIndex < FD->getNumParams(); ++ParamIndex) {
-          auto TestParam = FD->getParamDecl(ParamIndex);
-          if (TestParam == PD) {
-            FoundParam = true;
-            break;
-          }
-        }
-        if (FoundParam) {
-          for (const FunctionDecl *Redecl : FD->redecls()) {
-            auto RedeclParam = Redecl->getParamDecl(ParamIndex);
-            Result.mergeWith(getSecurityClass(RedeclParam, /*CheckRedecls*/false));
-          }
-        }
+      if (CheckRedecls) {
+        foreachParamRedecl(PD, [&Result, this](const ParmVarDecl *OtherP){
+          Result.mergeWith(getSecurityClass(OtherP, /*CheckRedecls*/false));
+        });
       }
     }
     if (const CXXMethodDecl *MD = dyn_cast<const CXXMethodDecl>(D)) {
@@ -403,9 +442,15 @@ class SecureInformationFlow
           } else {
             ParamRange = TargetFunc->getLocation();
           }
-          SecurityClass ParamClass = S;
+          SecurityClass ParamClass;
           ParamClass.mergeWith(getSecurityClass(Param));
-          assertAccess(ParamClass, ParamRange, E, E);
+          if (isOutParam(Param)) {
+            assertAccess(E, getSecurityClass(E), E->getSourceRange(),
+                         ParamClass, Param->getSourceRange());
+          } else {
+            ParamClass.mergeWith(S);
+            assertAccess(ParamClass, ParamRange, E, E);
+          }
           ++I;
         }
         break;
@@ -430,7 +475,12 @@ class SecureInformationFlow
             ParamRange = E->getSourceRange();
           }
           SecurityClass ParamClass = getSecurityClass(Param);
-          assertAccess(ParamClass, ParamRange, E, E);
+          if (isOutParam(Param)) {
+            assertAccess(E, getSecurityClass(E), E->getSourceRange(),
+                         ParamClass, Param->getSourceRange());
+          } else {
+            assertAccess(ParamClass, ParamRange, E, E);
+          }
           ++I;
         }
         break;
