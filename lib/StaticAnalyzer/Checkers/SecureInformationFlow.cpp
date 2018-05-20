@@ -413,9 +413,21 @@ class SecureInformationFlow
     return AssignTypes.find(K) != AssignTypes.end();
   }
 
-  void analyzeStmt(SecurityContext Ctxt, FunctionDecl &FD, Stmt *S) {
+  bool doesReturn(const Stmt *S) {
+    if (S == nullptr)
+      return false;
+    if (S->getStmtClass() == Stmt::ReturnStmtClass)
+      return true;
+    for (const Stmt *C : S->children())
+      if (doesReturn(C))
+        return true;
+    return false;
+  }
+
+  void analyzeStmt(SecurityContext &ParentCtxt, FunctionDecl &FD, Stmt *S) {
     if (S == nullptr)
       return;
+    SecurityContext Ctxt = ParentCtxt;
 
     switch(S->getStmtClass()) {
       case Stmt::StmtClass::IfStmtClass: {
@@ -428,6 +440,9 @@ class SecureInformationFlow
         analyzeStmt(Ctxt, FD, If->getCond());
         analyzeStmt(SubContext, FD, If->getThen());
         analyzeStmt(SubContext, FD, If->getElse());
+        if (doesReturn(If->getThen()) || doesReturn(If->getElse())) {
+          ParentCtxt = SubContext;
+        }
         return;
       }
       case Stmt::StmtClass::CompoundAssignOperatorClass:
