@@ -9,6 +9,8 @@
 #define CIFPure __attribute__((annotate("InfoFlow-Pure")))
 #define CIFDeclassify(LBL, EXPR) ((void)LBL, EXPR)
 
+#define CIF
+
 #else // __clang__
 
 #define CIFOut
