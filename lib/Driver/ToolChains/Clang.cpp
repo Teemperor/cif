@@ -2264,6 +2264,8 @@ static void RenderAnalyzerOptions(const ArgList &Args, ArgStringList &CmdArgs,
     CmdArgs.push_back("-analyzer-checker=core");
     CmdArgs.push_back("-analyzer-checker=apiModeling");
 
+    CmdArgs.push_back("-analyzer-checker=security.SecureInformationFlow");
+
     if (!Triple.isWindowsMSVCEnvironment()) {
       CmdArgs.push_back("-analyzer-checker=unix");
     } else {
