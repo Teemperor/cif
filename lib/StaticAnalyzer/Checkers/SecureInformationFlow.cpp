@@ -157,7 +157,7 @@ class SecureInformationFlow
       return It->second;
     }
     bool Result;
-    markAsPure(D, Result = isPureByAttr(D));
+    markAsPure(CD, Result = isPureByAttr(CD));
     return Result;
   }
 
