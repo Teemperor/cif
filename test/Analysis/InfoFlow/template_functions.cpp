@@ -14,7 +14,7 @@ void equalNonPure(T &A, T &B) {
   GlobalB = A == B;
 }
 
-CIFPure {
+CIFPureList {
   using ::equal;
 }
 
