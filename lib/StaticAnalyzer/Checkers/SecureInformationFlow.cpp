@@ -80,8 +80,23 @@ public:
     return !Owners.empty();
   }
 
-  void dump() {
+  void dump() const {
     llvm::errs() << "SecurityClass: " << getLabel() << "\n";
+  }
+};
+
+class SecurityContext {
+  std::vector<std::pair<SecurityClass, Stmt *> > Context;
+  SecurityClass ContextClass;
+public:
+  SecurityContext() = default;
+  void add(SecurityClass NewClass, Stmt *Cause) {
+    Context.emplace_back(NewClass, Cause);
+    ContextClass.mergeWith(NewClass);
+  }
+
+  SecurityClass getClass() const {
+    return ContextClass;
   }
 };
 
@@ -121,9 +136,10 @@ class SecureInformationFlow
     return It != PureDecls.end() && *It == CD;
   }
 
-  bool assertAccess(Stmt *ViolatingStmt,
+  bool assertAccess(const SecurityContext &Ctxt, Stmt *ViolatingStmt,
                     SecurityClass TargetClass, SourceRange TargetRange,
                     SecurityClass SourceClass, SourceRange SourceRange) {
+    SourceClass.mergeWith(Ctxt.getClass());
     if (!TargetClass.allowsFlowFrom(SourceClass)) {
       Violations.push_back({ViolatingStmt, nullptr, TargetClass, SourceClass,
                               TargetRange, SourceRange});
@@ -132,11 +148,15 @@ class SecureInformationFlow
     return true;
   }
 
-  bool assertAccess(SecurityClass TargetClass, SourceRange TargetRange,
+  bool assertAccess(const SecurityContext &Ctxt,
+                    SecurityClass TargetClass, SourceRange TargetRange,
                     Stmt *Source, Stmt *ViolatingStmt) {
     if (ViolatingStmt == nullptr)
       return true;
+
     SecurityClass SourceClass = getSecurityClass(Source);
+    SourceClass.mergeWith(Ctxt.getClass());
+
     if (!TargetClass.allowsFlowFrom(SourceClass)) {
       Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
                               TargetRange, Source->getSourceRange()});
@@ -145,19 +165,19 @@ class SecureInformationFlow
     return true;
   }
 
-  bool assertAccess(Decl *Target, Stmt *Source, Stmt *ViolatingStmt) {
-    return assertAccess(getSecurityClass(Target), Target->getSourceRange(),
+  bool assertAccess(const SecurityContext &Ctxt, Decl *Target, Stmt *Source, Stmt *ViolatingStmt) {
+    return assertAccess(Ctxt, getSecurityClass(Target), Target->getSourceRange(),
                         Source, ViolatingStmt);
   }
 
-  bool assertAccess(Decl *Target, Stmt *Source) {
-    return assertAccess(getSecurityClass(Target), Target->getSourceRange(),
+  bool assertAccess(const SecurityContext &Ctxt, Decl *Target, Stmt *Source) {
+    return assertAccess(Ctxt, getSecurityClass(Target), Target->getSourceRange(),
                         Source, Source);
   }
 
 
-  bool assertAccess(Stmt *Target, Stmt *Source, Stmt *ViolatingStmt) {
-    return assertAccess(getSecurityClass(Target), Target->getSourceRange(),
+  bool assertAccess(const SecurityContext &Ctxt, Stmt *Target, Stmt *Source, Stmt *ViolatingStmt) {
+    return assertAccess(Ctxt, getSecurityClass(Target), Target->getSourceRange(),
                         Source, ViolatingStmt);
   }
 
@@ -203,7 +223,7 @@ class SecureInformationFlow
     auto Attrs = D->specific_attrs<AnnotateAttr>();
     for (const auto &A : Attrs) {
       StringRef AS = A->getAnnotation();
-      Result.mergeWith(SecurityClass::parseLabel(A->getAnnotation().str()));
+      Result.mergeWith(SecurityClass::parseLabel(AS.str()));
     }
     return Result;
   }
@@ -393,20 +413,32 @@ class SecureInformationFlow
     return AssignTypes.find(K) != AssignTypes.end();
   }
 
-  void analyzeStmt(FunctionDecl &FD, Stmt *S) {
+  void analyzeStmt(SecurityContext Ctxt, FunctionDecl &FD, Stmt *S) {
     if (S == nullptr)
       return;
 
     switch(S->getStmtClass()) {
+      case Stmt::StmtClass::IfStmtClass: {
+        IfStmt *If = dyn_cast<IfStmt>(S);
+        SecurityClass CondClass = getSecurityClass(If->getCond());
+
+        SecurityContext SubContext = Ctxt;
+        SubContext.add(CondClass, If->getCond());
+
+        analyzeStmt(Ctxt, FD, If->getCond());
+        analyzeStmt(SubContext, FD, If->getThen());
+        analyzeStmt(SubContext, FD, If->getElse());
+        return;
+      }
       case Stmt::StmtClass::CompoundAssignOperatorClass:
       case Stmt::StmtClass::BinaryOperatorClass: {
         BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
         if (isAssignOp(BO->getOpcode())) {
-          assertAccess(BO->getLHS(), BO->getRHS(), BO);
+          assertAccess(Ctxt, BO->getLHS(), BO->getRHS(), BO);
         }
         DeclassifyInfo D = tryAsDeclassify(BO);
         if (D.valid()) {
-          assertAccess(D.getFromClass(), D.getStmt()->getSourceRange(),
+          assertAccess(Ctxt, D.getFromClass(), D.getStmt()->getSourceRange(),
                        D.getChild(), D.getStmt());
         }
         break;
@@ -415,15 +447,14 @@ class SecureInformationFlow
         DeclStmt *DS = dyn_cast<DeclStmt>(S);
         for (Decl *CD : DS->decls()) {
           if (VarDecl *VD = dyn_cast<VarDecl>(CD)) {
-            assertAccess(VD,  VD->getInit(), S);
-            analyzeStmt(FD, VD->getInit());
+            assertAccess(Ctxt, VD,  VD->getInit(), S);
           }
         }
         break;
       }
       case Stmt::StmtClass::ReturnStmtClass: {
         ReturnStmt *RS = dyn_cast<ReturnStmt>(S);
-        assertAccess(&FD, RS->getRetValue(), RS);
+        assertAccess(Ctxt, &FD, RS->getRetValue(), RS);
         break;
       }
       case Stmt::StmtClass::CXXMemberCallExprClass: {
@@ -445,11 +476,11 @@ class SecureInformationFlow
           SecurityClass ParamClass;
           ParamClass.mergeWith(getSecurityClass(Param));
           if (isOutParam(Param)) {
-            assertAccess(E, getSecurityClass(E), E->getSourceRange(),
+            assertAccess(Ctxt, E, getSecurityClass(E), E->getSourceRange(),
                          ParamClass, Param->getSourceRange());
           } else {
             ParamClass.mergeWith(S);
-            assertAccess(ParamClass, ParamRange, E, E);
+            assertAccess(Ctxt, ParamClass, ParamRange, E, E);
           }
           ++I;
         }
@@ -476,10 +507,10 @@ class SecureInformationFlow
           }
           SecurityClass ParamClass = getSecurityClass(Param);
           if (isOutParam(Param)) {
-            assertAccess(E, getSecurityClass(E), E->getSourceRange(),
+            assertAccess(Ctxt, E, getSecurityClass(E), E->getSourceRange(),
                          ParamClass, Param->getSourceRange());
           } else {
-            assertAccess(ParamClass, ParamRange, E, E);
+            assertAccess(Ctxt, ParamClass, ParamRange, E, E);
           }
           ++I;
         }
@@ -489,16 +520,18 @@ class SecureInformationFlow
           break;
     }
     for (Stmt *C : S->children())
-      analyzeStmt(FD, C);
+      analyzeStmt(Ctxt, FD, C);
   }
 
 public:
   void analyzeFunction(FunctionDecl &FD) {
-    analyzeStmt(FD, FD.getBody());
+    SecurityContext Context;
+    analyzeStmt(Context, FD, FD.getBody());
   }
   void analyseInitializer(const CXXCtorInitializer &I) {
+    SecurityContext Ctxt;
     if (I.isAnyMemberInitializer()) {
-      assertAccess(I.getAnyMember(), I.getInit());
+      assertAccess(Ctxt, I.getAnyMember(), I.getInit());
     } else if (I.isBaseInitializer()) {
       // TODO: Can't verify this without finding what constructor
       // was called?
@@ -506,7 +539,8 @@ public:
   }
 
   void analyzeFieldDecl(FieldDecl *D) {
-    assertAccess(D, D->getInClassInitializer());
+    SecurityContext Ctxt;
+    assertAccess(Ctxt, D, D->getInClassInitializer());
   }
 
   void checkEndOfTranslationUnit(const TranslationUnitDecl *TU,

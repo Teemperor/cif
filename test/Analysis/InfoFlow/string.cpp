@@ -3,7 +3,7 @@
 #include "CIF.h"
 
 class string {
-  string operator+(const string& S);
+    const char *Data;
 };
 
 string createUserAccount1(CIFLabel("Public") string UserName,
