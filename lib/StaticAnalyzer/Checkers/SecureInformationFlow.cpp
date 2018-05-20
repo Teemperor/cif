@@ -112,9 +112,9 @@ class SecureInformationFlow
   };
   std::vector<Violation> Violations;
 
-  std::vector<const Decl *> PureDecls;
+  std::unordered_map<const Decl *, bool> PureDecls;
 
-  void markAsPure(const Decl *D) {
+  void markAsPure(const Decl *D, bool IsPure = true) {
     if (!D)
       return;
     if (const FunctionTemplateDecl *TFD = dyn_cast<const FunctionTemplateDecl>(D)) {
@@ -125,15 +125,40 @@ class SecureInformationFlow
       for (const auto &Spez : TD->specializations())
         markAsPure(Spez);
     }
-    PureDecls.push_back(D->getCanonicalDecl());
+    PureDecls[D->getCanonicalDecl()] = IsPure;
+  }
+
+  bool isPureByAttrImpl(const Decl *D) {
+    bool Result = false;
+    auto Attrs = D->specific_attrs<AnnotateAttr>();
+    for (const auto &A : Attrs) {
+      StringRef AS = A->getAnnotation();
+      Result |= (AS == "InfoFlow-Pure");
+    }
+    return Result;
+  }
+
+  bool isPureByAttr(const Decl *D) {
+    if (const FunctionDecl *FD = dyn_cast<const FunctionDecl>(D)) {
+      for (const auto &Redecl : D->redecls()) {
+        if (isPureByAttrImpl(Redecl))
+          return true;
+      }
+    }
+    return isPureByAttrImpl(D);
   }
 
   bool isPure(const Decl *D) {
     if (D == nullptr)
       return false;
     auto CD = D->getCanonicalDecl();
-    auto It = std::lower_bound(PureDecls.begin(), PureDecls.end(), CD);
-    return It != PureDecls.end() && *It == CD;
+    auto It = PureDecls.find(CD);
+    if (It != PureDecls.end()) {
+      return It->second;
+    }
+    bool Result;
+    markAsPure(D, Result = isPureByAttr(D));
+    return Result;
   }
 
   bool assertAccess(const SecurityContext &Ctxt, Stmt *ViolatingStmt,
@@ -196,8 +221,10 @@ class SecureInformationFlow
       }
       if (FoundParam) {
         for (const FunctionDecl *Redecl : FD->redecls()) {
-          auto RedeclParam = Redecl->getParamDecl(ParamIndex);
-          Func(RedeclParam);
+          if (ParamIndex < Redecl->getNumParams()) {
+            auto RedeclParam = Redecl->getParamDecl(ParamIndex);
+            Func(RedeclParam);
+          }
         }
       }
     }
@@ -248,6 +275,11 @@ class SecureInformationFlow
       Result.mergeWith(getSecurityClass(FD->getParent()));
     }
     if (const CXXRecordDecl *RD = dyn_cast<const CXXRecordDecl>(D)) {
+      if (CheckRedecls) {
+        for(const auto &Redecl : RD->redecls()) {
+          Result.mergeWith(getSecurityClass(Redecl, /*CheckRedecls*/false));
+        }
+      }
       for (auto &Base : RD->bases()) {
         TypeSourceInfo *T = Base.getTypeSourceInfo();
         const CXXRecordDecl *BaseDecl = T->getType().getTypePtrOrNull()->getAsCXXRecordDecl();
@@ -606,7 +638,6 @@ void SecureInformationFlow::checkEndOfTranslationUnit(const TranslationUnitDecl 
       }
     }
   }
-  std::sort(Self->PureDecls.begin(), Self->PureDecls.end());
 
   ForwardToFlowChecker A(*Self);
   A.TraverseTranslationUnitDecl(const_cast<TranslationUnitDecl *>(TU));

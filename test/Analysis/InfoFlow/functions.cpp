@@ -3,15 +3,22 @@
 #include "CIF.h"
 
 int strcmp(const char *username, const char *password);
+CIFPure int strcmp2(const char *username, const char *password);
 
-CIFPure {
+CIFPureList {
   using ::strcmp;
 }
 
 int login1(char *username, CIFLabel("Password") char *password) {
-  int correct = strcmp(password, "letmein"); // expected-warning{{Information flow violation from label Password to label <NO-LABEL>}}
-  return correct;
+  CIFLabel("X") int correct = strcmp(password, "letmein"); // expected-warning{{Information flow violation from label Password to label X}}
+  return CIFDeclassify("X->", correct);
 }
+
+int login1Strcmp2(char *username, CIFLabel("Password") char *password) {
+  CIFLabel("X") int correct = strcmp2(password, "letmein"); // expected-warning{{Information flow violation from label Password to label X}}
+  return CIFDeclassify("X->", correct);
+}
+
 
 int login2(char *username, CIFLabel("Password") char *password) {
   CIFLabel("Password") int correct = strcmp(password, "letmein");

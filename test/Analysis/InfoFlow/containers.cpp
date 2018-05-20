@@ -14,7 +14,7 @@ public:
   }
 };
 
-CIFPure {
+CIFPureList {
   using ::vector;
 }
 
