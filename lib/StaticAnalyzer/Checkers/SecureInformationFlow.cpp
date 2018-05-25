@@ -118,14 +118,23 @@ public:
 class SecurityContext {
   std::vector<std::pair<SecurityClass, Stmt *> > Context;
   SecurityClass ContextClass;
+  SecurityContext *Parent = nullptr;
 public:
   SecurityContext() = default;
   /// Adds the given security class to the context. This will increase the
   /// security class of the context to the least-restrictive class that
   /// can hold information from the new class and the existing context class.
-  void add(SecurityClass NewClass, Stmt *Cause) {
+  void add(SecurityClass NewClass, Stmt *Cause, bool ToParents = false) {
     Context.emplace_back(NewClass, Cause);
     ContextClass.mergeWith(NewClass);
+    if (ToParents && Parent) {
+      Parent->add(NewClass, Cause, true);
+    }
+  }
+
+  /// Sets the parent context of this context;
+  void setParent(SecurityContext &P) {
+    Parent = &P;
   }
 
   /// Returns the security class of the context that should be additionally
@@ -591,21 +600,22 @@ class SecureInformationFlow
     if (S == nullptr)
       return;
     SecurityContext Ctxt = ParentCtxt;
+    Ctxt.setParent(ParentCtxt);
 
     switch(S->getStmtClass()) {
       case Stmt::StmtClass::IfStmtClass: {
         IfStmt *If = dyn_cast<IfStmt>(S);
         SecurityClass CondClass = getSecurityClass(If->getCond());
 
+
         SecurityContext SubContext = Ctxt;
-        SubContext.add(CondClass, If->getCond());
+        SubContext.setParent(Ctxt);
+        bool ToParents = canReturn(If->getThen()) || canReturn(If->getElse());
+        SubContext.add(CondClass, If->getCond(), ToParents);
 
         analyzeStmt(Ctxt, FD, If->getCond());
         analyzeStmt(SubContext, FD, If->getThen());
         analyzeStmt(SubContext, FD, If->getElse());
-        if (canReturn(If->getThen()) || canReturn(If->getElse())) {
-          ParentCtxt = SubContext;
-        }
         return;
       }
       case Stmt::StmtClass::CompoundAssignOperatorClass:

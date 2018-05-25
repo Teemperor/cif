@@ -28,8 +28,10 @@ int branch3(CIFLabel("S") int pass) {
 
 int branch4(CIFLabel("S") int pass) {
   int Result;
-  if (pass == 1337) {
-    return true; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
+  if (true) {
+    if (pass == 1337) {
+      return true; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
+    }
   }
   Result = false; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
   return Result; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
@@ -38,8 +40,10 @@ int branch4(CIFLabel("S") int pass) {
 CIFLabel("S")
 int branch4Fixed(CIFLabel("S") int pass) {
   CIFLabel("S") int Result;
-  if (pass == 1337) {
-    return true;
+  if (true) {
+    if (pass == 1337) {
+      return true;
+    }
   }
   Result = false;
   return Result;
