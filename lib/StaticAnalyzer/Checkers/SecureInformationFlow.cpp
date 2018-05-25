@@ -1,5 +1,4 @@
-﻿//===--- SecureInformationFlow.cpp - Clone detection checker -------------*- C++
-//-*-===//
+﻿//===--- SecureInformationFlow.cpp - Information flow verifier --*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -9,8 +8,8 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// SecureInformationFlow is a checker that reports clones in the current
-/// translation unit.
+/// SecureInformationFlow is a checker that verifies the information flow of
+/// Cif in the source file.
 ///
 //===----------------------------------------------------------------------===//
 
