@@ -603,6 +603,13 @@ class SecureInformationFlow
     Ctxt.setParent(ParentCtxt);
 
     switch(S->getStmtClass()) {
+      // For If/While/For statements we have to check the security class of
+      // the condition. If this security class is non-empty, we also have to
+      // add it to the security context of the then/else/body statements to
+      // prevent implicit flows. If the then/else/body statements have the
+      // chance to call 'return', we also have to pass the security class up
+      // to the parent security context to ensure that this does not trigger
+      // an implicit information flow.
       case Stmt::StmtClass::IfStmtClass: {
         IfStmt *If = dyn_cast<IfStmt>(S);
         SecurityClass CondClass = getSecurityClass(If->getCond());
@@ -618,6 +625,7 @@ class SecureInformationFlow
         return;
       }
       case Stmt::StmtClass::ForStmtClass: {
+        // Case documented above.
         ForStmt *For = dyn_cast<ForStmt>(S);
         SecurityClass CondClass = getSecurityClass(For->getCond());
 
@@ -631,6 +639,7 @@ class SecureInformationFlow
         return;
       }
       case Stmt::StmtClass::WhileStmtClass: {
+        // Case documented above.
         WhileStmt *While = dyn_cast<WhileStmt>(S);
         SecurityClass CondClass = getSecurityClass(While->getCond());
 
