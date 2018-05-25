@@ -37,6 +37,28 @@ int branch4(CIFLabel("S") int pass) {
   return Result; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
 }
 
+int branch4While(CIFLabel("S") int pass) {
+  int Result;
+  if (true) {
+    while (pass == 1337) {
+      return true; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
+    }
+  }
+  Result = false; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
+  return Result; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
+}
+
+int branch4For(CIFLabel("S") int pass) {
+  int Result;
+  if (true) {
+    for (;pass == 1337;) {
+      return true; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
+    }
+  }
+  Result = false; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
+  return Result; // expected-warning{{Information flow violation from label S to label <NO-LABEL>}}
+}
+
 CIFLabel("S")
 int branch4Fixed(CIFLabel("S") int pass) {
   CIFLabel("S") int Result;

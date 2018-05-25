@@ -607,7 +607,6 @@ class SecureInformationFlow
         IfStmt *If = dyn_cast<IfStmt>(S);
         SecurityClass CondClass = getSecurityClass(If->getCond());
 
-
         SecurityContext SubContext = Ctxt;
         SubContext.setParent(Ctxt);
         bool ToParents = canReturn(If->getThen()) || canReturn(If->getElse());
@@ -616,6 +615,32 @@ class SecureInformationFlow
         analyzeStmt(Ctxt, FD, If->getCond());
         analyzeStmt(SubContext, FD, If->getThen());
         analyzeStmt(SubContext, FD, If->getElse());
+        return;
+      }
+      case Stmt::StmtClass::ForStmtClass: {
+        ForStmt *For = dyn_cast<ForStmt>(S);
+        SecurityClass CondClass = getSecurityClass(For->getCond());
+
+        SecurityContext SubContext = Ctxt;
+        SubContext.setParent(Ctxt);
+        bool ToParents = canReturn(For->getBody());
+        SubContext.add(CondClass, For->getCond(), ToParents);
+
+        analyzeStmt(Ctxt, FD, For->getCond());
+        analyzeStmt(SubContext, FD, For->getBody());
+        return;
+      }
+      case Stmt::StmtClass::WhileStmtClass: {
+        WhileStmt *While = dyn_cast<WhileStmt>(S);
+        SecurityClass CondClass = getSecurityClass(While->getCond());
+
+        SecurityContext SubContext = Ctxt;
+        SubContext.setParent(Ctxt);
+        bool ToParents = canReturn(While->getBody());
+        SubContext.add(CondClass, While->getCond(), ToParents);
+
+        analyzeStmt(Ctxt, FD, While->getCond());
+        analyzeStmt(SubContext, FD, While->getBody());
         return;
       }
       case Stmt::StmtClass::CompoundAssignOperatorClass:
