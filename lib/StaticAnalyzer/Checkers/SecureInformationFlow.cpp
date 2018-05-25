@@ -1,4 +1,5 @@
-﻿//===--- SecureInformationFlow.cpp - Clone detection checker -------------*- C++ -*-===//
+﻿//===--- SecureInformationFlow.cpp - Clone detection checker -------------*- C++
+//-*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -8,8 +9,8 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// SecureInformationFlow is a checker that reports clones in the current translation
-/// unit.
+/// SecureInformationFlow is a checker that reports clones in the current
+/// translation unit.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -34,6 +35,7 @@ namespace {
 class SecurityClass {
   /// The set of owners of
   std::set<std::string> Owners;
+
 public:
   SecurityClass() = default;
 
@@ -99,15 +101,11 @@ public:
 
   /// Returns true if this security class is not the "bottom" security class
   /// representing unclassified data.
-  operator bool() const {
-    return !Owners.empty();
-  }
+  operator bool() const { return !Owners.empty(); }
 
   /// Dumps the information about this security class to the LLVM error stream.
   /// For debugging purposes.
-  void dump() const {
-    llvm::errs() << "SecurityClass: " << getLabel() << "\n";
-  }
+  void dump() const { llvm::errs() << "SecurityClass: " << getLabel() << "\n"; }
 };
 
 /// The security context in which a statement can evaluated.
@@ -116,9 +114,10 @@ public:
 /// the current state of the program. A context can get a more restrictive
 /// security class by implicit flows that depend on classified information.
 class SecurityContext {
-  std::vector<std::pair<SecurityClass, Stmt *> > Context;
+  std::vector<std::pair<SecurityClass, Stmt *>> Context;
   SecurityClass ContextClass;
   SecurityContext *Parent = nullptr;
+
 public:
   SecurityContext() = default;
   /// Adds the given security class to the context. This will increase the
@@ -133,20 +132,15 @@ public:
   }
 
   /// Sets the parent context of this context;
-  void setParent(SecurityContext &P) {
-    Parent = &P;
-  }
+  void setParent(SecurityContext &P) { Parent = &P; }
 
   /// Returns the security class of the context that should be additionally
   /// applied to every information evaluated in this context.
-  SecurityClass getClass() const {
-    return ContextClass;
-  }
+  SecurityClass getClass() const { return ContextClass; }
 };
 
 /// Implements the Cif secure information flow policy.
-class SecureInformationFlow
-    : public Checker<check::EndOfTranslationUnit> {
+class SecureInformationFlow : public Checker<check::EndOfTranslationUnit> {
   mutable std::unique_ptr<BugType> BT_Exact;
 
   /// A violation of the policy that was found in the program while verifying.
@@ -171,7 +165,8 @@ class SecureInformationFlow
     if (!D)
       return;
     // For function template decls we also mark all specializations as pure.
-    if (const FunctionTemplateDecl *TFD = dyn_cast<const FunctionTemplateDecl>(D)) {
+    if (const FunctionTemplateDecl *TFD =
+            dyn_cast<const FunctionTemplateDecl>(D)) {
       for (const auto &Spez : TFD->specializations())
         markAsPure(Spez);
     }
@@ -226,7 +221,6 @@ class SecureInformationFlow
     return Result;
   }
 
-
   /// Checks if the given flow is permitted and records a violation if not.
   bool assertAccess(const SecurityContext &Ctxt, Stmt *ViolatingStmt,
                     SecurityClass TargetClass, SourceRange TargetRange,
@@ -234,16 +228,16 @@ class SecureInformationFlow
     SourceClass.mergeWith(Ctxt.getClass());
     if (!TargetClass.allowsFlowFrom(SourceClass)) {
       Violations.push_back({ViolatingStmt, nullptr, TargetClass, SourceClass,
-                              TargetRange, SourceRange});
+                            TargetRange, SourceRange});
       return false;
     }
     return true;
   }
 
   /// Checks if the given flow is permitted and records a violation if not.
-  bool assertAccess(const SecurityContext &Ctxt,
-                    SecurityClass TargetClass, SourceRange TargetRange,
-                    Stmt *Source, Stmt *ViolatingStmt) {
+  bool assertAccess(const SecurityContext &Ctxt, SecurityClass TargetClass,
+                    SourceRange TargetRange, Stmt *Source,
+                    Stmt *ViolatingStmt) {
     if (ViolatingStmt == nullptr)
       return true;
 
@@ -252,30 +246,33 @@ class SecureInformationFlow
 
     if (!TargetClass.allowsFlowFrom(SourceClass)) {
       Violations.push_back({ViolatingStmt, Source, TargetClass, SourceClass,
-                              TargetRange, Source->getSourceRange()});
+                            TargetRange, Source->getSourceRange()});
       return false;
     }
     return true;
   }
 
   // Utility overloads for the above functions.
-  bool assertAccess(const SecurityContext &Ctxt, Decl *Target, Stmt *Source, Stmt *ViolatingStmt) {
-    return assertAccess(Ctxt, getSecurityClass(Target), Target->getSourceRange(),
-                        Source, ViolatingStmt);
+  bool assertAccess(const SecurityContext &Ctxt, Decl *Target, Stmt *Source,
+                    Stmt *ViolatingStmt) {
+    return assertAccess(Ctxt, getSecurityClass(Target),
+                        Target->getSourceRange(), Source, ViolatingStmt);
   }
 
   bool assertAccess(const SecurityContext &Ctxt, Decl *Target, Stmt *Source) {
-    return assertAccess(Ctxt, getSecurityClass(Target), Target->getSourceRange(),
-                        Source, Source);
+    return assertAccess(Ctxt, getSecurityClass(Target),
+                        Target->getSourceRange(), Source, Source);
   }
 
-  bool assertAccess(const SecurityContext &Ctxt, Stmt *Target, Stmt *Source, Stmt *ViolatingStmt) {
-    return assertAccess(Ctxt, getSecurityClass(Target), Target->getSourceRange(),
-                        Source, ViolatingStmt);
+  bool assertAccess(const SecurityContext &Ctxt, Stmt *Target, Stmt *Source,
+                    Stmt *ViolatingStmt) {
+    return assertAccess(Ctxt, getSecurityClass(Target),
+                        Target->getSourceRange(), Source, ViolatingStmt);
   }
 
   /// Iterates over each redecl of the given ParmVarDecl.
-  void foreachParamRedecl(const ParmVarDecl *D, std::function<void(const ParmVarDecl*)> Func) {
+  void foreachParamRedecl(const ParmVarDecl *D,
+                          std::function<void(const ParmVarDecl *)> Func) {
     auto C = D->getDeclContext();
     const FunctionDecl *const FD = dyn_cast_or_null<const FunctionDecl>(C);
     // First check if the param was declared in a function.
@@ -283,7 +280,7 @@ class SecureInformationFlow
       // Find the index of the given parameter in its parent function.
       unsigned ParamIndex = 0;
       bool FoundParam = false;
-      for(; ParamIndex < FD->getNumParams(); ++ParamIndex) {
+      for (; ParamIndex < FD->getNumParams(); ++ParamIndex) {
         auto TestParam = FD->getParamDecl(ParamIndex);
         if (TestParam == D) {
           FoundParam = true;
@@ -352,8 +349,8 @@ class SecureInformationFlow
     // For parameter decls we have to check all redecls.
     if (const ParmVarDecl *PD = dyn_cast<const ParmVarDecl>(D)) {
       if (CheckRedecls) {
-        foreachParamRedecl(PD, [&Result, this](const ParmVarDecl *OtherP){
-          Result.mergeWith(getSecurityClass(OtherP, /*CheckRedecls*/false));
+        foreachParamRedecl(PD, [&Result, this](const ParmVarDecl *OtherP) {
+          Result.mergeWith(getSecurityClass(OtherP, /*CheckRedecls*/ false));
         });
       }
     }
@@ -371,14 +368,15 @@ class SecureInformationFlow
     if (const CXXRecordDecl *RD = dyn_cast<const CXXRecordDecl>(D)) {
       // Check the security classes of all redecls.
       if (CheckRedecls) {
-        for(const auto &Redecl : RD->redecls()) {
-          Result.mergeWith(getSecurityClass(Redecl, /*CheckRedecls*/false));
+        for (const auto &Redecl : RD->redecls()) {
+          Result.mergeWith(getSecurityClass(Redecl, /*CheckRedecls*/ false));
         }
       }
       // Check the security classes of the base classes.
       for (auto &Base : RD->bases()) {
         TypeSourceInfo *T = Base.getTypeSourceInfo();
-        const CXXRecordDecl *BaseDecl = T->getType().getTypePtrOrNull()->getAsCXXRecordDecl();
+        const CXXRecordDecl *BaseDecl =
+            T->getType().getTypePtrOrNull()->getAsCXXRecordDecl();
         Result.mergeWith(getSecurityClass(BaseDecl));
       }
     }
@@ -386,7 +384,8 @@ class SecureInformationFlow
     // pointers the pointee record.
     if (const VarDecl *VD = dyn_cast<VarDecl>(D)) {
       Result.mergeWith(getSecurityClass(VD->getType()->getAsCXXRecordDecl()));
-      Result.mergeWith(getSecurityClass(VD->getType()->getPointeeCXXRecordDecl()));
+      Result.mergeWith(
+          getSecurityClass(VD->getType()->getPointeeCXXRecordDecl()));
     }
     // Generic redecl check code.
     // FIXME: Is this redundant with above's redecl walking code?
@@ -395,7 +394,7 @@ class SecureInformationFlow
       do {
         // Don't redecl check the previous decl, otherwise we just keep
         // keep recursively checking the redecl chain.
-        Result.mergeWith(getSecurityClass(Redecl, /*CheckRedecls*/false));
+        Result.mergeWith(getSecurityClass(Redecl, /*CheckRedecls*/ false));
         if (Redecl->isFirstDecl())
           break;
       } while ((Redecl = Redecl->getPreviousDecl()));
@@ -410,47 +409,48 @@ class SecureInformationFlow
 
     SecurityClass Result;
 
-    switch(S->getStmtClass()) {
-      case Stmt::StmtClass::BinaryOperatorClass: {
-        BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
-        // If this is a declassify statement, then the security class of the
-        // statement is the security class to which we declassify.
-        DeclassifyInfo D = tryAsDeclassify(BO);
-        if (D.valid()) {
-          return D.getTargetClass();
-        }
-        break;
+    switch (S->getStmtClass()) {
+    case Stmt::StmtClass::BinaryOperatorClass: {
+      BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
+      // If this is a declassify statement, then the security class of the
+      // statement is the security class to which we declassify.
+      DeclassifyInfo D = tryAsDeclassify(BO);
+      if (D.valid()) {
+        return D.getTargetClass();
       }
-      case Stmt::StmtClass::DeclRefExprClass: {
-        DeclRefExpr *E = dyn_cast<DeclRefExpr>(S);
-        return getSecurityClass(E->getFoundDecl());
-      }
-      case Stmt::StmtClass::MemberExprClass: {
-        MemberExpr *E = dyn_cast<MemberExpr>(S);
-        Result = getSecurityClass(E->getFoundDecl().getDecl());
-        break;
-      }
-      case Stmt::StmtClass::CXXMemberCallExprClass: {
-        CXXMemberCallExpr *E = dyn_cast<CXXMemberCallExpr>(S);
+      break;
+    }
+    case Stmt::StmtClass::DeclRefExprClass: {
+      DeclRefExpr *E = dyn_cast<DeclRefExpr>(S);
+      return getSecurityClass(E->getFoundDecl());
+    }
+    case Stmt::StmtClass::MemberExprClass: {
+      MemberExpr *E = dyn_cast<MemberExpr>(S);
+      Result = getSecurityClass(E->getFoundDecl().getDecl());
+      break;
+    }
+    case Stmt::StmtClass::CXXMemberCallExprClass: {
+      CXXMemberCallExpr *E = dyn_cast<CXXMemberCallExpr>(S);
 
-        auto S = SecurityClass();
-        auto CalleeClass = getSecurityClass(E->getCallee());
-        auto MethodClass = getSecurityClass(E->getMethodDecl());
-        if (isPure(E->getRecordDecl())) {
-          return CalleeClass;
-        } else {
-          return MethodClass;
-        }
+      auto S = SecurityClass();
+      auto CalleeClass = getSecurityClass(E->getCallee());
+      auto MethodClass = getSecurityClass(E->getMethodDecl());
+      if (isPure(E->getRecordDecl())) {
+        return CalleeClass;
+      } else {
+        return MethodClass;
+      }
 
-        return S;
-      }
-      case Stmt::StmtClass::CallExprClass: {
-        CallExpr *E = dyn_cast<CallExpr>(S);
-        if (isPure(E->getCalleeDecl()))
-          break;
-        return getSecurityClass(E->getCalleeDecl());
-      }
-      default: break;
+      return S;
+    }
+    case Stmt::StmtClass::CallExprClass: {
+      CallExpr *E = dyn_cast<CallExpr>(S);
+      if (isPure(E->getCalleeDecl()))
+        break;
+      return getSecurityClass(E->getCalleeDecl());
+    }
+    default:
+      break;
     }
 
     for (Stmt *C : S->children()) {
@@ -474,6 +474,7 @@ class SecureInformationFlow
     bool Valid = false;
     /// Any errors that occured while parsing a declassify statement.
     std::string Error;
+
   public:
     DeclassifyInfo() = default;
     static DeclassifyInfo parse(Stmt *S, Stmt *Child, StringRef Str) {
@@ -501,41 +502,27 @@ class SecureInformationFlow
     }
 
     /// Returns true if this represents a valid declassify statement.
-    bool valid() const {
-      return Valid;
-    }
+    bool valid() const { return Valid; }
 
     /// Whether any error occured while parsing the declassify statement.
-    bool hasError() const {
-      return !Error.empty();
-    }
+    bool hasError() const { return !Error.empty(); }
 
     /// The error string (or an empty string if not error was found).
-    std::string getError() const {
-      return Error;
-    }
+    std::string getError() const { return Error; }
 
     /// Returns the security class from which the information flows into the
     /// declassify statement.
-    SecurityClass getFromClass() const {
-      return From;
-    }
+    SecurityClass getFromClass() const { return From; }
     /// Returns the security class to which the information flows from this
     /// declassify statement.
-    SecurityClass getTargetClass() const {
-      return Target;
-    }
+    SecurityClass getTargetClass() const { return Target; }
 
     // The source statement that is the input data with the expected 'From'
     // security class.
-    Stmt *getChild() const {
-      return Child;
-    }
+    Stmt *getChild() const { return Child; }
 
     // Returns the declassify statement itself.
-    Stmt *getStmt() const {
-      return S;
-    }
+    Stmt *getStmt() const { return S; }
   };
 
   /// Try to parse the given statement as a declassify statement.
@@ -560,17 +547,12 @@ class SecureInformationFlow
 
   /// List of operators that represent assignments.
   const std::unordered_set<BinaryOperatorKind> AssignTypes = {
-    BinaryOperatorKind::BO_Assign,
-    BinaryOperatorKind::BO_AddAssign,
-    BinaryOperatorKind::BO_AndAssign,
-    BinaryOperatorKind::BO_DivAssign,
-    BinaryOperatorKind::BO_MulAssign,
-    BinaryOperatorKind::BO_OrAssign,
-    BinaryOperatorKind::BO_RemAssign,
-    BinaryOperatorKind::BO_ShlAssign,
-    BinaryOperatorKind::BO_ShrAssign,
-    BinaryOperatorKind::BO_SubAssign,
-    BinaryOperatorKind::BO_XorAssign,
+      BinaryOperatorKind::BO_Assign,    BinaryOperatorKind::BO_AddAssign,
+      BinaryOperatorKind::BO_AndAssign, BinaryOperatorKind::BO_DivAssign,
+      BinaryOperatorKind::BO_MulAssign, BinaryOperatorKind::BO_OrAssign,
+      BinaryOperatorKind::BO_RemAssign, BinaryOperatorKind::BO_ShlAssign,
+      BinaryOperatorKind::BO_ShrAssign, BinaryOperatorKind::BO_SubAssign,
+      BinaryOperatorKind::BO_XorAssign,
   };
 
   /// Returns true iff the given operator kind is an assignment operator.
@@ -602,162 +584,164 @@ class SecureInformationFlow
     SecurityContext Ctxt = ParentCtxt;
     Ctxt.setParent(ParentCtxt);
 
-    switch(S->getStmtClass()) {
-      // For If/While/For statements we have to check the security class of
-      // the condition. If this security class is non-empty, we also have to
-      // add it to the security context of the then/else/body statements to
-      // prevent implicit flows. If the then/else/body statements have the
-      // chance to call 'return', we also have to pass the security class up
-      // to the parent security context to ensure that this does not trigger
-      // an implicit information flow.
-      case Stmt::StmtClass::IfStmtClass: {
-        IfStmt *If = dyn_cast<IfStmt>(S);
-        SecurityClass CondClass = getSecurityClass(If->getCond());
+    switch (S->getStmtClass()) {
+    // For If/While/For statements we have to check the security class of
+    // the condition. If this security class is non-empty, we also have to
+    // add it to the security context of the then/else/body statements to
+    // prevent implicit flows. If the then/else/body statements have the
+    // chance to call 'return', we also have to pass the security class up
+    // to the parent security context to ensure that this does not trigger
+    // an implicit information flow.
+    case Stmt::StmtClass::IfStmtClass: {
+      IfStmt *If = dyn_cast<IfStmt>(S);
+      SecurityClass CondClass = getSecurityClass(If->getCond());
 
-        SecurityContext SubContext = Ctxt;
-        SubContext.setParent(Ctxt);
-        bool ToParents = canReturn(If->getThen()) || canReturn(If->getElse());
-        SubContext.add(CondClass, If->getCond(), ToParents);
+      SecurityContext SubContext = Ctxt;
+      SubContext.setParent(Ctxt);
+      bool ToParents = canReturn(If->getThen()) || canReturn(If->getElse());
+      SubContext.add(CondClass, If->getCond(), ToParents);
 
-        analyzeStmt(Ctxt, FD, If->getCond());
-        analyzeStmt(SubContext, FD, If->getThen());
-        analyzeStmt(SubContext, FD, If->getElse());
-        return;
+      analyzeStmt(Ctxt, FD, If->getCond());
+      analyzeStmt(SubContext, FD, If->getThen());
+      analyzeStmt(SubContext, FD, If->getElse());
+      return;
+    }
+    case Stmt::StmtClass::ForStmtClass: {
+      // Case documented above.
+      ForStmt *For = dyn_cast<ForStmt>(S);
+      SecurityClass CondClass = getSecurityClass(For->getCond());
+
+      SecurityContext SubContext = Ctxt;
+      SubContext.setParent(Ctxt);
+      bool ToParents = canReturn(For->getBody());
+      SubContext.add(CondClass, For->getCond(), ToParents);
+
+      analyzeStmt(Ctxt, FD, For->getCond());
+      analyzeStmt(SubContext, FD, For->getBody());
+      return;
+    }
+    case Stmt::StmtClass::WhileStmtClass: {
+      // Case documented above.
+      WhileStmt *While = dyn_cast<WhileStmt>(S);
+      SecurityClass CondClass = getSecurityClass(While->getCond());
+
+      SecurityContext SubContext = Ctxt;
+      SubContext.setParent(Ctxt);
+      bool ToParents = canReturn(While->getBody());
+      SubContext.add(CondClass, While->getCond(), ToParents);
+
+      analyzeStmt(Ctxt, FD, While->getCond());
+      analyzeStmt(SubContext, FD, While->getBody());
+      return;
+    }
+    case Stmt::StmtClass::CompoundAssignOperatorClass:
+    case Stmt::StmtClass::BinaryOperatorClass: {
+      BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
+      if (isAssignOp(BO->getOpcode())) {
+        assertAccess(Ctxt, BO->getLHS(), BO->getRHS(), BO);
       }
-      case Stmt::StmtClass::ForStmtClass: {
-        // Case documented above.
-        ForStmt *For = dyn_cast<ForStmt>(S);
-        SecurityClass CondClass = getSecurityClass(For->getCond());
-
-        SecurityContext SubContext = Ctxt;
-        SubContext.setParent(Ctxt);
-        bool ToParents = canReturn(For->getBody());
-        SubContext.add(CondClass, For->getCond(), ToParents);
-
-        analyzeStmt(Ctxt, FD, For->getCond());
-        analyzeStmt(SubContext, FD, For->getBody());
-        return;
+      // A binary operator might be a declassify statement (which is just
+      // the comma operator). Try to parse the statement as such and if it
+      // works, apply the Cif policy on it.
+      DeclassifyInfo D = tryAsDeclassify(BO);
+      if (D.valid()) {
+        assertAccess(Ctxt, D.getFromClass(), D.getStmt()->getSourceRange(),
+                     D.getChild(), D.getStmt());
       }
-      case Stmt::StmtClass::WhileStmtClass: {
-        // Case documented above.
-        WhileStmt *While = dyn_cast<WhileStmt>(S);
-        SecurityClass CondClass = getSecurityClass(While->getCond());
-
-        SecurityContext SubContext = Ctxt;
-        SubContext.setParent(Ctxt);
-        bool ToParents = canReturn(While->getBody());
-        SubContext.add(CondClass, While->getCond(), ToParents);
-
-        analyzeStmt(Ctxt, FD, While->getCond());
-        analyzeStmt(SubContext, FD, While->getBody());
-        return;
-      }
-      case Stmt::StmtClass::CompoundAssignOperatorClass:
-      case Stmt::StmtClass::BinaryOperatorClass: {
-        BinaryOperator *BO = dyn_cast<BinaryOperator>(S);
-        if (isAssignOp(BO->getOpcode())) {
-          assertAccess(Ctxt, BO->getLHS(), BO->getRHS(), BO);
+      break;
+    }
+    case Stmt::StmtClass::DeclStmtClass: {
+      // A list of declarations. If we have variable declarations, check
+      // that the variable initializers work correctly.
+      DeclStmt *DS = dyn_cast<DeclStmt>(S);
+      for (Decl *CD : DS->decls()) {
+        if (VarDecl *VD = dyn_cast<VarDecl>(CD)) {
+          assertAccess(Ctxt, VD, VD->getInit(), S);
         }
-        // A binary operator might be a declassify statement (which is just
-        // the comma operator). Try to parse the statement as such and if it
-        // works, apply the Cif policy on it.
-        DeclassifyInfo D = tryAsDeclassify(BO);
-        if (D.valid()) {
-          assertAccess(Ctxt, D.getFromClass(), D.getStmt()->getSourceRange(),
-                       D.getChild(), D.getStmt());
+      }
+      break;
+    }
+    case Stmt::StmtClass::ReturnStmtClass: {
+      // When calling return, we have to assert that the value we return
+      // can flow in the security class of the return value.
+      ReturnStmt *RS = dyn_cast<ReturnStmt>(S);
+      assertAccess(Ctxt, &FD, RS->getRetValue(), RS);
+      break;
+    }
+    case Stmt::StmtClass::CXXMemberCallExprClass: {
+      // Member function calls.
+      CXXMemberCallExpr *Call = dyn_cast<CXXMemberCallExpr>(S);
+      FunctionDecl *TargetFunc =
+          dyn_cast_or_null<FunctionDecl>(Call->getCalleeDecl());
+      // We call a function pointer, which is not supported yet.
+      if (!TargetFunc)
+        break;
+      const SecurityClass S = getSecurityClass(Call);
+      // Go over each parameter.
+      unsigned ParamIndex = 0;
+      for (Expr *E : Call->arguments()) {
+        ParmVarDecl *Param = nullptr;
+        SourceRange ParamRange;
+        if (ParamIndex < TargetFunc->getNumParams()) {
+          // Grab the actual parameter.
+          Param = TargetFunc->getParamDecl(ParamIndex);
+          ParamRange = Param->getSourceRange();
+        } else {
+          // Variadic function without an actual parameter, so let's use
+          // the function itself as the target source location.
+          ParamRange = TargetFunc->getLocation();
         }
-        break;
-      }
-      case Stmt::StmtClass::DeclStmtClass: {
-        // A list of declarations. If we have variable declarations, check
-        // that the variable initializers work correctly.
-        DeclStmt *DS = dyn_cast<DeclStmt>(S);
-        for (Decl *CD : DS->decls()) {
-          if (VarDecl *VD = dyn_cast<VarDecl>(CD)) {
-            assertAccess(Ctxt, VD,  VD->getInit(), S);
-          }
+        SecurityClass ParamClass;
+        ParamClass.mergeWith(getSecurityClass(Param));
+        if (isOutParam(Param)) {
+          // For out parameters, the flow is going from the parameter to
+          // the expression we pass to the function.
+          assertAccess(Ctxt, E, getSecurityClass(E), E->getSourceRange(),
+                       ParamClass, Param->getSourceRange());
+        } else {
+          // For parameters going into the function, we check the flow
+          // going from the expression to the variable decl.
+          ParamClass.mergeWith(S);
+          assertAccess(Ctxt, ParamClass, ParamRange, E, E);
         }
-        break;
+        ++ParamIndex;
       }
-      case Stmt::StmtClass::ReturnStmtClass: {
-        // When calling return, we have to assert that the value we return
-        // can flow in the security class of the return value.
-        ReturnStmt *RS = dyn_cast<ReturnStmt>(S);
-        assertAccess(Ctxt, &FD, RS->getRetValue(), RS);
+      break;
+    }
+    case Stmt::StmtClass::CallExprClass: {
+      // Normal function calls.
+      CallExpr *Call = dyn_cast<CallExpr>(S);
+      FunctionDecl *TargetFunc =
+          dyn_cast_or_null<FunctionDecl>(Call->getCalleeDecl());
+      if (isPure(TargetFunc))
         break;
-      }
-      case Stmt::StmtClass::CXXMemberCallExprClass: {
-        // Member function calls.
-        CXXMemberCallExpr *Call = dyn_cast<CXXMemberCallExpr>(S);
-        FunctionDecl *TargetFunc = dyn_cast_or_null<FunctionDecl>(Call->getCalleeDecl());
-        // We call a function pointer, which is not supported yet.
-        if (!TargetFunc)
-          break;
-        const SecurityClass S = getSecurityClass(Call);
-        // Go over each parameter.
-        unsigned ParamIndex = 0;
-        for (Expr * E : Call->arguments()) {
-          ParmVarDecl *Param = nullptr;
-          SourceRange ParamRange;
-          if (ParamIndex < TargetFunc->getNumParams()) {
-            // Grab the actual parameter.
-            Param = TargetFunc->getParamDecl(ParamIndex);
+      unsigned I = 0;
+      for (Expr *E : Call->arguments()) {
+        ParmVarDecl *Param = nullptr;
+        SourceRange ParamRange;
+        if (TargetFunc) {
+          if (I < TargetFunc->getNumParams()) {
+            Param = TargetFunc->getParamDecl(I);
             ParamRange = Param->getSourceRange();
           } else {
-            // Variadic function without an actual parameter, so let's use
-            // the function itself as the target source location.
             ParamRange = TargetFunc->getLocation();
           }
-          SecurityClass ParamClass;
-          ParamClass.mergeWith(getSecurityClass(Param));
-          if (isOutParam(Param)) {
-            // For out parameters, the flow is going from the parameter to
-            // the expression we pass to the function.
-            assertAccess(Ctxt, E, getSecurityClass(E), E->getSourceRange(),
-                         ParamClass, Param->getSourceRange());
-          } else {
-            // For parameters going into the function, we check the flow
-            // going from the expression to the variable decl.
-            ParamClass.mergeWith(S);
-            assertAccess(Ctxt, ParamClass, ParamRange, E, E);
-          }
-          ++ParamIndex;
+        } else {
+          ParamRange = E->getSourceRange();
         }
-        break;
-      }
-      case Stmt::StmtClass::CallExprClass: {
-        // Normal function calls.
-        CallExpr *Call = dyn_cast<CallExpr>(S);
-        FunctionDecl *TargetFunc = dyn_cast_or_null<FunctionDecl>(Call->getCalleeDecl());
-        if (isPure(TargetFunc))
-          break;
-        unsigned I = 0;
-        for (Expr * E : Call->arguments()) {
-          ParmVarDecl *Param = nullptr;
-          SourceRange ParamRange;
-          if (TargetFunc) {
-            if (I < TargetFunc->getNumParams()) {
-              Param = TargetFunc->getParamDecl(I);
-              ParamRange = Param->getSourceRange();
-            } else {
-              ParamRange = TargetFunc->getLocation();
-            }
-          } else {
-            ParamRange = E->getSourceRange();
-          }
-          SecurityClass ParamClass = getSecurityClass(Param);
-          if (isOutParam(Param)) {
-            assertAccess(Ctxt, E, getSecurityClass(E), E->getSourceRange(),
-                         ParamClass, Param->getSourceRange());
-          } else {
-            assertAccess(Ctxt, ParamClass, ParamRange, E, E);
-          }
-          ++I;
+        SecurityClass ParamClass = getSecurityClass(Param);
+        if (isOutParam(Param)) {
+          assertAccess(Ctxt, E, getSecurityClass(E), E->getSourceRange(),
+                       ParamClass, Param->getSourceRange());
+        } else {
+          assertAccess(Ctxt, ParamClass, ParamRange, E, E);
         }
-        break;
+        ++I;
       }
-      default:
-          break;
+      break;
+    }
+    default:
+      break;
     }
     // Also verify all children.
     for (Stmt *C : S->children())
@@ -794,13 +778,12 @@ public:
 };
 
 /// AST visitor that forwards all relevant code to the verifier.
-class ForwardToFlowChecker
-  : public RecursiveASTVisitor<ForwardToFlowChecker> {
+class ForwardToFlowChecker : public RecursiveASTVisitor<ForwardToFlowChecker> {
 
   SecureInformationFlow &Checker;
+
 public:
-  ForwardToFlowChecker(SecureInformationFlow &Checker) : Checker(Checker) {
-  }
+  ForwardToFlowChecker(SecureInformationFlow &Checker) : Checker(Checker) {}
   bool VisitFunctionDecl(FunctionDecl *D) {
     Checker.verifyFunction(*D);
     return true;
@@ -819,9 +802,9 @@ public:
 
 } // end anonymous namespace
 
-void SecureInformationFlow::checkEndOfTranslationUnit(const TranslationUnitDecl *TU,
-                                             AnalysisManager &Mgr,
-                                             BugReporter &BR) const {
+void SecureInformationFlow::checkEndOfTranslationUnit(
+    const TranslationUnitDecl *TU, AnalysisManager &Mgr,
+    BugReporter &BR) const {
 
   SecureInformationFlow *Self = const_cast<SecureInformationFlow *>(this);
 
@@ -854,17 +837,19 @@ static PathDiagnosticLocation makeLocation(const Stmt *S,
 }
 
 /// Reports all violations to the user.
-void SecureInformationFlow::reportViolations(
-    BugReporter &BR, AnalysisManager &Mgr) const {
+void SecureInformationFlow::reportViolations(BugReporter &BR,
+                                             AnalysisManager &Mgr) const {
 
   if (!BT_Exact)
-    BT_Exact.reset(new BugType(this, "Information flow violation", "Information Flow"));
+    BT_Exact.reset(
+        new BugType(this, "Information flow violation", "Information Flow"));
 
   for (Violation V : Violations) {
     // For every violation report from which to which security class the
     // disallowed flow happened.
-    std::string Msg = std::string("Information flow violation from label ")
-        + V.SourceClass.getLabel() + " to label " + V.TargetClass.getLabel();
+    std::string Msg = std::string("Information flow violation from label ") +
+                      V.SourceClass.getLabel() + " to label " +
+                      V.TargetClass.getLabel();
     auto R = llvm::make_unique<BugReport>(*BT_Exact, Msg,
                                           makeLocation(V.ViolatingStmt, Mgr));
     // Attach the violation to the target location.
