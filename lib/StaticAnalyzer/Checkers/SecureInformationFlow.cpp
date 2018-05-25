@@ -403,9 +403,12 @@ class SecureInformationFlow : public Checker<check::EndOfTranslationUnit> {
 
   // Gets the security class of the given stmt.
   SecurityClass getSecurityClass(Stmt *S) {
+    // Missing/empty statements always have no security class.
     if (S == nullptr)
       return SecurityClass();
 
+    // Default base security class for all language constructs. Can be further
+    // classified below.
     SecurityClass Result;
 
     switch (S->getStmtClass()) {
@@ -420,10 +423,12 @@ class SecureInformationFlow : public Checker<check::EndOfTranslationUnit> {
       break;
     }
     case Stmt::StmtClass::DeclRefExprClass: {
+      // Result is the security class of the referenced decl.
       DeclRefExpr *E = dyn_cast<DeclRefExpr>(S);
       return getSecurityClass(E->getFoundDecl());
     }
     case Stmt::StmtClass::MemberExprClass: {
+      // Result is the security class of the referenced class member.
       MemberExpr *E = dyn_cast<MemberExpr>(S);
       Result = getSecurityClass(E->getFoundDecl().getDecl());
       break;
@@ -435,8 +440,12 @@ class SecureInformationFlow : public Checker<check::EndOfTranslationUnit> {
       auto CalleeClass = getSecurityClass(E->getCallee());
       auto MethodClass = getSecurityClass(E->getMethodDecl());
       if (isPure(E->getRecordDecl())) {
+        // For pure classes, the result is the security class of the variable
+        // decl.
         return CalleeClass;
       } else {
+        // For non-pure classes, we look at the security class of the function
+        // return type.
         return MethodClass;
       }
 
@@ -444,8 +453,12 @@ class SecureInformationFlow : public Checker<check::EndOfTranslationUnit> {
     }
     case Stmt::StmtClass::CallExprClass: {
       CallExpr *E = dyn_cast<CallExpr>(S);
+      // For pure functions, we get the security class below when we merge the
+      // classes of all the children.
       if (isPure(E->getCalleeDecl()))
         break;
+      // For non-pure functions, we get the security class by looking at the
+      // return value security class.
       return getSecurityClass(E->getCalleeDecl());
     }
     default:
@@ -715,14 +728,18 @@ class SecureInformationFlow : public Checker<check::EndOfTranslationUnit> {
       if (isPure(TargetFunc))
         break;
       unsigned I = 0;
+      // Go over each parameter.
       for (Expr *E : Call->arguments()) {
         ParmVarDecl *Param = nullptr;
         SourceRange ParamRange;
         if (TargetFunc) {
           if (I < TargetFunc->getNumParams()) {
+            // Grab the actual parameter.
             Param = TargetFunc->getParamDecl(I);
             ParamRange = Param->getSourceRange();
           } else {
+            // Variadic function without an actual parameter, so let's use
+            // the function itself as the target source location.
             ParamRange = TargetFunc->getLocation();
           }
         } else {
@@ -730,9 +747,13 @@ class SecureInformationFlow : public Checker<check::EndOfTranslationUnit> {
         }
         SecurityClass ParamClass = getSecurityClass(Param);
         if (isOutParam(Param)) {
+          // For out parameters, the flow is going from the parameter to
+          // the expression we pass to the function.
           assertAccess(Ctxt, E, getSecurityClass(E), E->getSourceRange(),
                        ParamClass, Param->getSourceRange());
         } else {
+          // For parameters going into the function, we check the flow
+          // going from the expression to the variable decl.
           assertAccess(Ctxt, ParamClass, ParamRange, E, E);
         }
         ++I;
